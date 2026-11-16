@@ -8,3 +8,4 @@ CMakeSettings.json
 build-mac/
 tools/
 .DS_Store
+JUCE
