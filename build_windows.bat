@@ -189,11 +189,14 @@ if errorlevel 1 goto :fail
 if not exist dist mkdir dist
 copy /y "build-ninja\CONTRXL25_artefacts\Release\CONTRXL 25.exe" "dist\" >nul
 if errorlevel 1 goto :fail
+rem the plug-in scanner helper must sit next to the .exe (it keeps broken plug-ins from crashing the app)
+copy /y "build-ninja\CONTRXL25_artefacts\Release\CONTRXL25_PluginScanner.exe" "dist\" >nul
+if errorlevel 1 goto :fail
 
 echo.
 echo  ==========================================================
 echo   Done!  dist\CONTRXL 25.exe
-echo   Copy that single file anywhere; it needs nothing else.
+echo   Keep "CONTRXL25_PluginScanner.exe" in the same folder as the app.
 echo  ==========================================================
 echo.
 start "" "%~dp0dist"

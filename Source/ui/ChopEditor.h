@@ -23,7 +23,7 @@ private:
         bTrans { "Transients", "Chop at the drum hits" }, bClear { "Clear", "Remove all chop points" },
         bToPads { "Chops > pads" }, bToKeys { "Chops > keys" }, bExtract { "Extract..." }, bResetKeys { "Reset keys", "The keys play this pad's pitch again (removes chop-to-key assignments)" },
         bUndo { "Undo" }, bLoad { "Load..." }, bDone { "Done", "Close this window (Esc)" },
-        bTrim { "Trim", "Trim the sample: drag the green handles, then Apply" }, bTrimOk { "Apply", "Commit the trim (Ctrl+Z undoes)" },
+        bTrim { "Trim", "Trim the sample: drag the green handles, then Apply" }, bTrimOk { "Apply", "Commit the trim (" CX_MOD "+Z undoes)" },
         bTrimX { "Cancel", "Leave the sample untouched" };
     LSlider fadeIn { "Fade in", 0, 500, 1, [] (double v) { return juce::String ((int) v) + " ms"; } },
             fadeOut { "Fade out", 0, 2000, 1, [] (double v) { return juce::String ((int) v) + " ms"; } },

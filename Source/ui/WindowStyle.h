@@ -4,7 +4,7 @@
 
 namespace cx::ui
 {
-// Windows 10/11: dark (black) native title bar and border, like other dark apps. No-op elsewhere.
+// Windows 10/11 and macOS: dark native title bar (and border), like other dark apps. No-op on Linux.
 // Call after the window is visible.
 void makeTitleBarDark (juce::Component& window);
 }

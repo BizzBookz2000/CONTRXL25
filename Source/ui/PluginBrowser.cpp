@@ -82,7 +82,7 @@ void PluginBrowser::rebuild()
         info.setText ("No " + pluginKind() + (showInst ? " instruments" : " effects") + " found yet. Press Scan" + (CX_MOBILE ? juce::String (".") : juce::String (", or drop a .vst3 file on the slot.")), juce::dontSendNotification);
     else if (ctl.plugins.known.getNumTypes() == 0)
         info.setText (CX_MOBILE ? "No plug-ins found yet. Press Scan to find the AUv3 plug-ins installed on this iPad (install them from the App Store first)."
-                                : "No plug-ins found yet. Press Scan to look for VST3 plug-ins on this PC (or drop a .vst3 file on a slot).", juce::dontSendNotification);
+                                : "No plug-ins found yet. Press Scan to look for " CX_PLUGIN_KINDS " plug-ins on this " CX_COMPUTER " (or drop a .vst3 file on a slot).", juce::dontSendNotification);
     else
         info.setText (juce::String (rows.size()) + " of " + juce::String (total) + (showInst ? " instruments" : " effects")
                       + " - Enter or double-click loads into " + slot.label() + ". Esc closes.", juce::dontSendNotification);

@@ -1366,7 +1366,8 @@ namespace
         std::function<void()> close;
     };
 
-    // the plug-in list with a big "scan" button on top
+    // plug-in window: "Installed" (JUCE's list) + "Choose & scan" (pick plug-ins one by one).
+    // All scanning runs in the helper process, so a broken plug-in can't crash the app.
     class PluginListHost : public juce::Component
     {
     public:
@@ -1375,35 +1376,72 @@ namespace
             list = std::make_unique<juce::PluginListComponent> (c.plugins.formats, c.plugins.known, crashFile, props, true);
            #if CX_MOBILE
             list->setNumberOfThreadsForScanning (1);   // AUv3s open asynchronously: scan off the message thread
+           #else
+            chooser = std::make_unique<PluginScanPanel> (c, props);
            #endif
-            addAndMakeVisible (*list);
+            installed.addAndMakeVisible (*list);
+            installed.onResize = [this] { list->setBounds (installed.getLocalBounds()); };
+            tabs.addTab ("Installed", C::plate, &installed, false);
+            if (chooser != nullptr) tabs.addTab ("Choose & scan", C::plate, chooser.get(), false);
+            tabs.setTabBarDepth (30);
+            tabs.setOutline (0);
+            addAndMakeVisible (tabs);
             info.setText (CX_MOBILE ? "AUv3 plug-ins installed on this iPad (instruments and effects). Install them from the App Store, "
                                       "open each one once, then press Scan."
-                                    : "VST3 plug-ins (instruments and effects). Scan finds plug-ins in the usual VST3 folder "
-                                      "(C:\\Program Files\\Common Files\\VST3); add other folders when the scan asks. "
-                                      "A plug-in that crashes the scan is skipped next time.", juce::dontSendNotification);
+                                    : CX_PLUGIN_KINDS " plug-ins (instruments and effects). Plug-ins are opened in a separate helper while "
+                                      "scanning: one that crashes or hangs is marked Failed and skipped, the scan goes on. "
+                                     #if JUCE_MAC
+                                      "Audio Units are found through macOS itself. "
+                                     #endif
+                                      "If a scan keeps failing, use Choose & scan to pick plug-ins one by one.", juce::dontSendNotification);
             info.setFont (mono (11.0f)); info.setColour (juce::Label::textColourId, C::mute);
             info.setJustificationType (juce::Justification::topLeft);
             addAndMakeVisible (info);
-            scan.onClick = [this] { if (auto* f = ctl.plugins.formats.getFormat (0)) list->scanFor (*f); };
+            scan.onClick = [this]
+            {
+                tabs.setCurrentTabIndex (0);
+                const auto fmts = ctl.plugins.allFormats();
+                if (fmts.size() == 1) { list->scanFor (*fmts[0]); return; }
+                // several formats (macOS: VST3 + Audio Units): pick which to scan
+                juce::PopupMenu m;
+                for (int i = 0; i < fmts.size(); ++i) m.addItem (i + 1, "Scan for " + fmts[i]->getName() + " plug-ins");
+                m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&scan), [this, fmts] (int r)
+                {
+                    if (r > 0 && r <= fmts.size()) list->scanFor (*fmts[r - 1]);
+                });
+            };
+            pick.onClick = [this] { if (chooser == nullptr) return; tabs.setCurrentTabIndex (1); chooser->findPlugins(); };
             addAndMakeVisible (scan);
-            setSize (760, 560);
+            if (chooser != nullptr) addAndMakeVisible (pick);
+            setSize (900, 640);
         }
         void paint (juce::Graphics& g) override { g.fillAll (C::plate); }
         void resized() override
         {
             auto r = getLocalBounds().reduced (10);
             auto top = r.removeFromTop (40);
-            scan.setBounds (top.removeFromRight (180).reduced (0, 4));
+            scan.setBounds (top.removeFromRight (150).reduced (0, 4));
+            top.removeFromRight (6);
+            if (chooser != nullptr) { pick.setBounds (top.removeFromRight (150).reduced (0, 4)); top.removeFromRight (8); }
             info.setBounds (top);
             r.removeFromTop (6);
-            list->setBounds (r);
+            tabs.setBounds (r);
         }
     private:
+        struct Page : public juce::Component
+        {
+            std::function<void()> onResize;
+            void resized() override { if (onResize) onResize(); }
+        };
         Controller& ctl;
         std::unique_ptr<juce::PluginListComponent> list;
+        std::unique_ptr<PluginScanPanel> chooser;
+        Page installed;
+        juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
         juce::Label info;
-        Btn scan { "Scan for " + pluginKind() + " plug-ins", "Look for new or updated " + pluginKind() + " plug-ins" };
+        Btn scan { CX_MOBILE ? "Scan for " + pluginKind() + " plug-ins" : juce::String ("Scan all..."),
+                   "Scan every new or updated " + pluginKind() + " plug-in" + (CX_MOBILE ? juce::String() : juce::String (" (safely, one at a time)")) },
+            pick { "Choose & scan...", "List the plug-ins and choose which ones to scan" };
     };
 
     // auto-sampler settings
@@ -1524,11 +1562,11 @@ void MainComponent::showPluginList()
     {
         if (pluginListWin) { props->setValue ("win_plugins", pluginListWin->getWindowStateAsString()); pluginListWin.reset(); grabKeyboardFocus(); }
     }); });
-    auto crash = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("CONTRXL25").getChildFile ("plugin_scan_crash.txt");
+    auto crash = appDataDir().getChildFile ("plugin_scan_crash.txt");
     auto host = std::make_unique<PluginListHost> (ctl, props.get(), crash);
     pluginListWin->holder->setContent (host.get());
     pluginListWin->holder->owned = std::move (host);
-    placeWindow (*pluginListWin, "win_plugins", 780, 600);
+    placeWindow (*pluginListWin, "win_plugins", 920, 680);
 }
 
 void MainComponent::showAutoSampler (int pad)

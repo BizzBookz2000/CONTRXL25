@@ -198,7 +198,7 @@ void Controller::clearAllPads()
     pushUndo();
     for (auto& p : P.pads) p = Pad();
     trim.on = false;
-    changed(); status ("ALL PADS CLEARED - CTRL+Z UNDOES");
+    changed(); status ("ALL PADS CLEARED - " CX_MOD_UP "+Z UNDOES");
 }
 
 void Controller::clearKeys()
@@ -206,7 +206,7 @@ void Controller::clearKeys()
     pushUndo();
     for (auto& p : P.pads) { p.hasKmap = true; p.kmap.clear(); }
     P.s.keyPad.fill (0); P.s.keyPads = false;
-    changed(); status ("ALL CHOP-TO-KEY AND PAD-TO-KEY ASSIGNMENTS REMOVED - CTRL+Z UNDOES");
+    changed(); status ("ALL CHOP-TO-KEY AND PAD-TO-KEY ASSIGNMENTS REMOVED - " CX_MOD_UP "+Z UNDOES");
 }
 
 void Controller::togglePadMute (int gi)
@@ -463,7 +463,7 @@ void Controller::reversePad()
     for (auto& m : p.markers) m = 1.0f - m;
     std::sort (p.markers.begin(), p.markers.end());
     p.sel = -1;
-    changed(); status (padLabel (P.s.sel) + " REVERSED - CTRL+Z UNDOES");
+    changed(); status (padLabel (P.s.sel) + " REVERSED - " CX_MOD_UP "+Z UNDOES");
 }
 
 void Controller::normalizePad()
@@ -499,7 +499,7 @@ void Controller::applyStretch()
                 P.pads[(size_t) gi].buf = *result;
                 ui.stretchPct = 100;
                 changed();
-                status (juce::String (keep ? "STRETCHED " : "RESAMPLED ") + juce::String (old, 2) + " s -> " + juce::String ((*result)->duration(), 2) + " s - CTRL+Z UNDOES");
+                status (juce::String (keep ? "STRETCHED " : "RESAMPLED ") + juce::String (old, 2) + " s -> " + juce::String ((*result)->duration(), 2) + " s - " CX_MOD_UP "+Z UNDOES");
             });
 }
 
@@ -558,7 +558,7 @@ void Controller::chopsToPads()
         np.fx = src.fx; np.mg = src.mg;
         P.pads[(size_t) (first + i)] = np;
     }
-    changed(); status (juce::String (n) + " CHOPS ON " + padLabel (first) + "-" + padLabel (first + n - 1) + " - CTRL+Z UNDOES");
+    changed(); status (juce::String (n) + " CHOPS ON " + padLabel (first) + "-" + padLabel (first + n - 1) + " - " CX_MOD_UP "+Z UNDOES");
 }
 
 void Controller::chopsToKeys()
@@ -611,7 +611,7 @@ void Controller::extractChop (int chop, int to)
     np.name = p.name.substring (0, 14) + " " + juce::String (chop + 1).paddedLeft ('0', 2);
     np.fx = p.fx; np.mg = p.mg;
     P.pads[(size_t) to] = np;
-    changed(); status ("CHOP " + juce::String (chop + 1) + " -> " + padLabel (to) + " - CTRL+Z UNDOES");
+    changed(); status ("CHOP " + juce::String (chop + 1) + " -> " + padLabel (to) + " - " CX_MOD_UP "+Z UNDOES");
 }
 
 void Controller::assignChopKey (int chop, int key)
@@ -624,7 +624,7 @@ void Controller::assignChopKey (int chop, int key)
     p.hasKmap = true;
     p.kmap[key] = chop;
     p.keyMode = MODE_CHOP;
-    changed(); status ("CHOP " + juce::String (chop + 1) + " -> KEY " + juce::String (key + 1) + " - CTRL+Z UNDOES");
+    changed(); status ("CHOP " + juce::String (chop + 1) + " -> KEY " + juce::String (key + 1) + " - " CX_MOD_UP "+Z UNDOES");
 }
 
 // ------------------------------------------------------------------ trim
@@ -669,7 +669,7 @@ void Controller::trimApply()
     p.buf = dsp::trimShape (*sl, trim.fi, trim.fo, trim.g);
     p.markers = nm; p.sel = -1;
     trim.on = false;
-    changed(); status ("TRIM COMMITTED - " + juce::String (p.buf->duration(), 3) + " s - CTRL+Z UNDOES");
+    changed(); status ("TRIM COMMITTED - " + juce::String (p.buf->duration(), 3) + " s - " CX_MOD_UP "+Z UNDOES");
 }
 
 // ------------------------------------------------------------------ pad fx
@@ -776,7 +776,7 @@ void Controller::applyStems()
     pushUndo();
     auto nb = dsp::mixDown (*st, mix);
     if (i < 0) { p.buf = nb; p.m.st = StemMix(); } else { p.layers[(size_t) i].buf = nb; p.layers[(size_t) i].s.st = StemMix(); }
-    changed(); status ("STEM MIX APPLIED TO THE SAMPLE - CTRL+Z UNDOES");
+    changed(); status ("STEM MIX APPLIED TO THE SAMPLE - " CX_MOD_UP "+Z UNDOES");
 }
 
 void Controller::stemsToPads()
@@ -800,7 +800,7 @@ void Controller::stemsToPads()
         P.pads[(size_t) tg[(size_t) j]] = np;
         where << (j ? ", " : "") << padLabel (tg[(size_t) j]);
     }
-    changed(); status ("STEMS -> " + where + " - CTRL+Z UNDOES");
+    changed(); status ("STEMS -> " + where + " - " CX_MOD_UP "+Z UNDOES");
 }
 
 // ------------------------------------------------------------------ sequencer
@@ -1569,7 +1569,7 @@ void Controller::newSong()
     pushUndo();
     P.reset();
     trim.on = false; ui = UIState();
-    changed(); status ("NEW SONG - CTRL+Z BRINGS THE OLD ONE BACK");
+    changed(); status ("NEW SONG - " CX_MOD_UP "+Z BRINGS THE OLD ONE BACK");
 }
 
 std::vector<int> Controller::buildPlan() const
@@ -1879,7 +1879,7 @@ void Controller::selectTrackSteps()
 {
     ui.selTool = true; ui.hasSel = true;
     ui.sel = { ui.lane, ui.lane, 0, P.plen[(size_t) P.s.pat] - 1 };
-    status ("TRACK " + juce::String (ui.lane + 1) + " SELECTED - COPY IT, OR DRAG IT TO ANOTHER TRACK (CTRL = COPY)");
+    status ("TRACK " + juce::String (ui.lane + 1) + " SELECTED - COPY IT, OR DRAG IT TO ANOTHER TRACK (" CX_COPYMOD_UP " = COPY)");
 }
 
 void Controller::moveSteps (int dl, int ds, bool copy)
@@ -1965,7 +1965,7 @@ void Controller::libRemove (int index)
 {
     if (index < 0 || index >= (int) library.items.size()) return;
     const auto name = library.items[(size_t) index].name;
-    if (library.remove (index)) status (name.toUpperCase() + " REMOVED (THE FILE IS IN THE RECYCLE BIN)");
+    if (library.remove (index)) status (name.toUpperCase() + " REMOVED (THE FILE IS IN THE " CX_TRASH_UP ")");
     else status ("COULD NOT REMOVE " + name.toUpperCase());
     sendChangeMessage();
 }
@@ -2286,13 +2286,29 @@ void Controller::installPlugin (const SlotId& s, const juce::PluginDescription& 
 
 bool Controller::setPluginFromFile (const SlotId& s, const juce::String& path)
 {
-    auto* fmt = plugins.formats.getNumFormats() > 0 ? plugins.formats.getFormat (0) : nullptr;
-    if (fmt == nullptr) { status ("THIS BUILD CAN'T OPEN PLUG-IN FILES - USE THE PLUG-IN LIST"); return false; }
-    status ("READING " + juce::File (path).getFileName().toUpperCase() + "...");
+    if (! plugins.hasVst3()) { status ("THIS BUILD HAS NO PLUG-IN SUPPORT"); return false; }
+    auto* fmt = plugins.formatForFile (path);
+    if (fmt == nullptr) { status (juce::File (path).getFileName().toUpperCase() + " IS NOT A PLUG-IN THIS APP CAN OPEN"); return false; }
+    const auto fileName = juce::File (path).getFileName().toUpperCase();
     juce::OwnedArray<juce::PluginDescription> found;
-    fmt->findAllTypesForFile (found, path);
-    if (found.isEmpty()) { status ("NO VST3 PLUG-IN FOUND IN " + juce::File (path).getFileName().toUpperCase()); return false; }
-    for (auto* d : found) plugins.known.addType (*d);
+    // already scanned? use the list instead of opening it again
+    for (auto& k : plugins.known.getTypes())
+        if (k.fileOrIdentifier == path) found.add (new juce::PluginDescription (k));
+    if (found.isEmpty())
+    {
+        if (plugins.isSkipped (path))
+        {
+            status (fileName + " FAILED A SCAN BEFORE AND IS SKIPPED - RETRY IT IN PLUG-INS... > CHOOSE & SCAN");
+            return false;
+        }
+        status ("READING " + fileName + "...");
+        const auto o = plugins.scanOne (*fmt, path, found);   // runs in the helper: a crash can't take the app down
+        if (o.status != ScanOutcome::ok)
+        {
+            status (fileName + ": " + o.detail.toUpperCase() + (o.failed() ? " - IT WILL BE SKIPPED" : juce::String()));
+            return false;
+        }
+    }
     const bool wantInst = s.kind == SlotId::Inst;
     for (auto* d : found)
         if (d->isInstrument == wantInst) return setPlugin (s, *d);
@@ -2307,7 +2323,7 @@ void Controller::removePlugin (const SlotId& s)
     const auto name = slotRef (s).name;
     slotRef (s) = PluginSlot();
     changed();
-    status (name.toUpperCase() + " REMOVED - CTRL+Z BRINGS IT BACK");
+    status (name.toUpperCase() + " REMOVED - " CX_MOD_UP "+Z BRINGS IT BACK");
 }
 
 void Controller::toggleBypass (const SlotId& s)

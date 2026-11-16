@@ -1,4 +1,5 @@
 #include "PluginManager.h"
+#include "app/Platform.h"
 
 namespace cx
 {
@@ -8,7 +9,12 @@ PluginManager::PluginManager()
     formats.addFormat (std::make_unique<juce::VST3PluginFormat>());
    #endif
    #if JUCE_PLUGINHOST_AU && (JUCE_MAC || JUCE_IOS)
-    formats.addFormat (std::make_unique<juce::AudioUnitPluginFormat>());   // AUv3 on the iPad
+    formats.addFormat (std::make_unique<juce::AudioUnitPluginFormat>());   // Audio Units on the Mac, AUv3 on the iPad
+   #endif
+   #if ! CX_MOBILE
+    // every scan (also JUCE's scan dialog) opens plug-ins in the helper process, so a broken
+    // plug-in can't take CONTRXL 25 down; it is put on the skip list instead
+    known.setCustomScanner (std::make_unique<OutOfProcessScanner>());
    #endif
 }
 
@@ -45,6 +51,51 @@ void PluginManager::createAsyncXml (const juce::String& xml, double sampleRate, 
     const auto d = resolve (xml);
     if (d.name.isEmpty()) { if (done) done (nullptr, "unknown plug-in"); return; }
     createAsync (d, sampleRate, block, std::move (done));
+}
+
+juce::AudioPluginFormat* PluginManager::formatNamed (const juce::String& name) const
+{
+    for (int i = 0; i < formats.getNumFormats(); ++i)
+        if (auto* f = formats.getFormat (i); f != nullptr && f->getName() == name) return f;
+    return nullptr;
+}
+
+ScanOutcome PluginManager::scanOne (juce::AudioPluginFormat& format, const juce::String& id,
+                                    juce::OwnedArray<juce::PluginDescription>& found, int timeoutMs,
+                                    std::function<bool()> shouldStop)
+{
+    ScanOutcome o;
+    if (PluginScanner::helperAvailable())
+        o = PluginScanner::scanOne (format.getName(), id, found, timeoutMs, std::move (shouldStop));
+    else
+    {
+        // no helper (should not happen in a normal build): scan inside the app as before
+        format.findAllTypesForFile (found, id);
+        o.status = found.isEmpty() ? ScanOutcome::nothingFound : ScanOutcome::ok;
+        o.detail = found.isEmpty() ? juce::String ("Failed - no usable plug-in inside") : "OK - " + found[0]->name;
+    }
+    if (o.status == ScanOutcome::ok)
+    {
+        known.removeFromBlacklist (id);
+        for (auto* d : found) known.addType (*d);
+    }
+    else if (o.failed())
+        known.addToBlacklist (id);
+    return o;
+}
+
+juce::AudioPluginFormat* PluginManager::formatForFile (const juce::String& path) const
+{
+    for (int i = 0; i < formats.getNumFormats(); ++i)
+        if (auto* f = formats.getFormat (i); f != nullptr && f->fileMightContainThisPluginType (path)) return f;
+    return nullptr;
+}
+
+juce::Array<juce::AudioPluginFormat*> PluginManager::allFormats() const
+{
+    juce::Array<juce::AudioPluginFormat*> r;
+    for (int i = 0; i < formats.getNumFormats(); ++i) r.add (formats.getFormat (i));
+    return r;
 }
 
 std::unique_ptr<juce::AudioPluginInstance> PluginManager::create (const juce::PluginDescription& d, double sampleRate, int block, juce::String& error)

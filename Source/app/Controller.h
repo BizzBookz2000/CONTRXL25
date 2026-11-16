@@ -258,9 +258,15 @@ public:
     PluginNode* pluginNode (const SlotId& s) { return engine.pluginAt (s); }
     bool setPlugin (const SlotId& s, const juce::PluginDescription& d);
     juce::StringArray recentPlugins;                            // identifier strings, newest first (saved in settings)
-    // a .vst3 dropped on a slot / pad: added to the plug-in list, then loaded
+    // a .vst3 (or, on macOS, a .component) dropped on a slot / pad: added to the plug-in list, then loaded
     bool setPluginFromFile (const SlotId& s, const juce::String& path);
-    static bool isPluginFile (const juce::String& path) { return path.endsWithIgnoreCase (".vst3"); }
+    static bool isPluginFile (const juce::String& path)
+    {
+       #if JUCE_MAC
+        if (path.endsWithIgnoreCase (".component")) return true;   // Audio Unit bundle
+       #endif
+        return path.endsWithIgnoreCase (".vst3");
+    }
     void removePlugin (const SlotId& s);
     void toggleBypass (const SlotId& s);
     void pullPluginStates();                                    // live plug-in states -> model (before save / copy)

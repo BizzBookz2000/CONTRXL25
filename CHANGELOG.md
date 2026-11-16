@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.84.1 (macOS edition of 0.84.0)
+Everything in 0.84.0 (pads on keys, sample level meter, Sample into the next empty pad, iPad code, MPK mini
+support...) plus the Mac work, which is now part of the shared code:
+- **Builds and runs on macOS** (Intel and Apple silicon; runs on macOS 10.13+, builds on 10.15.4+):
+  `build_mac.sh` / `Build CONTRXL 25.command` fetch CMake and JUCE 8.0.12 if needed, sign the app for this Mac,
+  put it in `dist/` and install it in **Applications**. A warning appears if the project is on a USB drive.
+- **Audio Unit** instruments and effects next to VST3; `.component` files can be dropped on pads and slots.
+- **Plug-in scanning can't crash the app**: every plug-in is opened by a separate helper,
+  `CONTRXL25_PluginScanner`, one at a time. A plug-in that crashes or hangs (time-out 60 s) is marked *Failed* and
+  skipped and the scan goes on. Covers *Scan all*, files dropped on slots, and JUCE's scan dialog. Windows too
+  (`build_windows.bat` copies the helper into `dist`). Not used on the iPad.
+- **Choose & scan** tab in Plug-ins...: list every VST3 / Audio Unit without opening them, tick the ones to scan
+  (Tick new / Tick failed / Tick all), Scan ticked, Stop, Skip / Un-skip, time-out choice, Add a plug-in file...
+- Mac fix carried over from 0.76.1: Audio Units and VST3s are opened directly in the helper (every scan failed
+  before); AUv3 gets a proper macOS message loop.
+- Mac wording (Cmd, Option to copy, Trash, Finder), data in `~/Library/Application Support/CONTRXL25`, dark title bar.
+
 ## 0.84.0
 - **Pads on keys** (Windows, iPad and web): a third key mode, **PADS** ("a pad on each key"), next to KEYS and
   CHOP. Each key plays a whole pad at its own pitch - like a drum kit across the keyboard - and records onto the

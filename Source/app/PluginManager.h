@@ -1,6 +1,7 @@
-// CONTRXL 25 - finds and opens plug-ins: VST3 on Windows, AUv3 on the iPad
+// CONTRXL 25 - finds and opens plug-ins: VST3 on Windows, Audio Units + VST3 on macOS, AUv3 on the iPad
 #pragma once
 #include "engine/Plugins.h"
+#include "app/PluginScanner.h"
 
 namespace cx
 {
@@ -29,6 +30,19 @@ public:
 
     // plug-ins sorted for menus: instruments or effects
     juce::Array<juce::PluginDescription> list (bool instruments) const;
-    bool hasVst3() const { return formats.getNumFormats() > 0; }
+    bool hasVst3() const { return formats.getNumFormats() > 0; }   // true when any plug-in format is available
+
+    // the format that can open this file (.vst3, or .component on macOS), or nullptr
+    juce::AudioPluginFormat* formatForFile (const juce::String& path) const;
+    // every format, VST3 first (the scan button scans them all)
+    juce::Array<juce::AudioPluginFormat*> allFormats() const;
+    juce::AudioPluginFormat* formatNamed (const juce::String& name) const;
+
+    // Scan one plug-in file / identifier in the helper process (never crashes the app).
+    // Found plug-ins are added to `known`; a plug-in that fails goes on the skip list.
+    ScanOutcome scanOne (juce::AudioPluginFormat& format, const juce::String& fileOrIdentifier,
+                         juce::OwnedArray<juce::PluginDescription>& found, int timeoutMs = PluginScanner::defaultTimeoutMs,
+                         std::function<bool()> shouldStop = {});
+    bool isSkipped (const juce::String& fileOrIdentifier) const { return known.getBlacklistedFiles().contains (fileOrIdentifier); }
 };
 } // namespace cx

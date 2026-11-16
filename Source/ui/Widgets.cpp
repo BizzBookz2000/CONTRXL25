@@ -198,7 +198,7 @@ void PadButton::mouseDrag (const juce::MouseEvent& e)
         {
             dragging = true;
             dnd->startDragging ("pad:" + juce::String (padIndex()), this);
-            ctl.status ("DROP " + padLabel (padIndex()) + " ON A KEY TO PLAY IT FROM THAT KEY, OR ON A PAD TO SWAP (CTRL = COPY)");
+            ctl.status ("DROP " + padLabel (padIndex()) + " ON A KEY TO PLAY IT FROM THAT KEY, OR ON A PAD TO SWAP (" CX_COPYMOD_UP " = COPY)");
         }
 }
 
@@ -223,7 +223,7 @@ void PadButton::itemDropped (const SourceDetails& d)
         return;
     }
     const int from = d.description.toString().fromFirstOccurrenceOf ("pad:", false, false).getIntValue();
-    ctl.movePad (from, padIndex(), juce::ModifierKeys::currentModifiers.isCtrlDown() || juce::ModifierKeys::currentModifiers.isAltDown());
+    ctl.movePad (from, padIndex(), juce::ModifierKeys::currentModifiers.isCtrlDown() || juce::ModifierKeys::currentModifiers.isAltDown() || juce::ModifierKeys::currentModifiers.isCommandDown());
 }
 
 void PadButton::filesDropped (const juce::StringArray& files, int, int)

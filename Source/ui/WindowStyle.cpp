@@ -11,6 +11,8 @@
 #endif
 #include "WindowStyle.h"
 
+#if ! defined (__APPLE__)   // macOS version: WindowStyle_mac.mm
+
 namespace cx::ui
 {
 void makeTitleBarDark (juce::Component& window)
@@ -34,3 +36,4 @@ void makeTitleBarDark (juce::Component& window)
    #endif
 }
 }
+#endif

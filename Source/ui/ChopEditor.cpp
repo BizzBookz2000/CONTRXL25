@@ -50,7 +50,7 @@ void ChopEditor::refresh()
     fadeIn.setVisible (tr); fadeOut.setVisible (tr); gain.setVisible (tr);
     if (tr) { fadeIn.set (ctl.trim.fi); fadeOut.set (ctl.trim.fo); gain.set (ctl.trim.g); }
     hint.setText (tr ? "TRIM: drag the green handles to set the start and end, set fades and gain, then Apply. Everything you play uses the trimmed sound while you trim." : wave.manual ? "Click to add a chop point, drag a point to move it, right-click (or Alt-click) a point to remove it. "
-                                "Keys , and . step through the regions, Space plays the sequencer, Ctrl+Z undoes."
+                                "Keys , and . step through the regions, Space plays the sequencer, " CX_MOD "+Z undoes."
                               : "Click a region to hear it. Turn on Edit chops to place chop points. Double-click to load another sample.",
                   juce::dontSendNotification);
     {
