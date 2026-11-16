@@ -15,8 +15,8 @@ ChopEditor::ChopEditor (Controller& c, Dialogs& d) : Panel (c, d)
     bZoomOut.onClick = [this] { wave.zoomBy (1.0f / 1.5f); };
     bZoomIn.onClick = [this] { wave.zoomBy (1.5f); };
     bFit.onClick = [this] { wave.resetZoom(); };
-    for (int n : { 2, 4, 8, 16, 25, 32 })
-        addAndMakeVisible (eqBtns.add (new Btn (juce::String (n), "Cut into " + juce::String (n) + " equal chops", [this, n] { ctl.equalChops (n); })));
+    for (int n : { 2, 4, 8, 16, 25, 32, 0 })   // 0 = "as many as the keys" (shown for other keyboard sizes)
+        addAndMakeVisible (eqBtns.add (new Btn (juce::String (n), "Cut into " + juce::String (n) + " equal chops", [this, n] { ctl.equalChops (n > 0 ? n : ctl.P.s.keys); })));
     bTrans.onClick = [this] { ctl.transientChops(); };
     bClear.onClick = [this] { ctl.setMarkers ({}); ctl.status ("CHOPS CLEARED"); };
     bResetKeys.onClick = [this] { ctl.resetKeys(); };
@@ -53,7 +53,18 @@ void ChopEditor::refresh()
                                 "Keys , and . step through the regions, Space plays the sequencer, Ctrl+Z undoes."
                               : "Click a region to hear it. Turn on Edit chops to place chop points. Double-click to load another sample.",
                   juce::dontSendNotification);
-    for (int i = 0; i < eqBtns.size(); ++i) eqBtns[i]->setVisible (i < 5 || ctl.P.s.keys == 32);
+    {
+        static const int EQ[] = { 2, 4, 8, 16, 25, 32 };
+        const int keys = ctl.P.s.keys;
+        for (int i = 0; i < eqBtns.size(); ++i)
+        {
+            if (i < 6) { eqBtns[i]->setVisible (EQ[i] <= keys); continue; }
+            // "chop to" grows with your keyboard: 37, 49, 61... equal chops, one per key
+            eqBtns[i]->setVisible (keys != 25 && keys != 32);
+            eqBtns[i]->setButtonText (juce::String (keys));
+            eqBtns[i]->setTooltip ("Cut the sample into " + juce::String (keys) + " equal chops - one for every key");
+        }
+    }
     wave.refresh();
     resized();
 }

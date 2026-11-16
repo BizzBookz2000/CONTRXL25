@@ -193,11 +193,12 @@ void PadButton::mouseUp (const juce::MouseEvent&)
 
 void PadButton::mouseDrag (const juce::MouseEvent& e)
 {
-    if (! dragging && e.getDistanceFromDragStart() > 12 && ctl.P.pads[(size_t) padIndex()].buf)
+    if (! dragging && e.getDistanceFromDragStart() > 12 && ctl.P.pads[(size_t) padIndex()].hasSound())
         if (auto* dnd = juce::DragAndDropContainer::findParentDragContainerFor (this))
         {
             dragging = true;
             dnd->startDragging ("pad:" + juce::String (padIndex()), this);
+            ctl.status ("DROP " + padLabel (padIndex()) + " ON A KEY TO PLAY IT FROM THAT KEY, OR ON A PAD TO SWAP (CTRL = COPY)");
         }
 }
 
@@ -252,6 +253,9 @@ void PadButton::showMenu()
     m.addItem (8, p.inst.empty() ? "VST instrument..." : "VST instrument: " + p.inst.name + "...");
     m.addItem (9, "Auto-sample the instrument...", ! p.inst.empty());
     m.addItem (10, "Mixer");
+    m.addSeparator();
+    m.addItem (11, "Put this pad on a key... (then press the key)", p.hasSound());
+    m.addItem (12, "All pads > keys (key 1 = first pad with a sound...)");
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this), [this, gi] (int r)
     {
         switch (r)
@@ -259,6 +263,8 @@ void PadButton::showMenu()
             case 8: showPluginMenu (ctl, { SlotId::Inst, gi, 0 }, this); break;
             case 9: if (ctl.onAutoSampleDialog) ctl.onAutoSampleDialog (gi); break;
             case 10: if (ctl.onShowMixer) ctl.onShowMixer(); break;
+            case 11: ctl.ui.padToKey = gi; ctl.status ("PRESS THE KEY THAT SHOULD PLAY " + padLabel (gi) + " (OR DRAG THE PAD ONTO A KEY)"); break;
+            case 12: ctl.padsToKeys(); break;
             case 1: if (onLoadRequest) onLoadRequest (gi); break;
             case 2: ctl.copyPad(); break;
             case 3: ctl.pastePad(); break;
@@ -298,7 +304,7 @@ void showPluginMenu (Controller& ctl, const SlotId& s, juce::Component* target)
         if (st == "missing") m.addItem (5, "Plug-in not found - scan / try again");
         m.addSeparator();
     }
-    if (list.isEmpty()) m.addItem (6, wantInst ? "No VST3 instruments yet - scan for plug-ins..." : "No VST3 effects yet - scan for plug-ins...");
+    if (list.isEmpty()) m.addItem (6, "No " + pluginKind() + (wantInst ? " instruments" : " effects") + " yet - scan for plug-ins...");
     else
     {
         m.addItem (8, slot.empty() ? (wantInst ? "Search instruments..." : "Search effects...") : "Search and replace...");
@@ -363,6 +369,122 @@ void Meter::paint (juce::Graphics& g)
     const bool clip = juce::Time::getMillisecondCounter() - clipT < 1200;
     g.setColour (clip ? juce::Colour (0xffe5484d) : C::mute); g.setFont (mono (10.5f));
     g.drawText (pk > 0.0005f ? juce::String (20.0f * std::log10 (pk), 1) : juce::String ("-inf"), txt, juce::Justification::centredRight);
+}
+
+// ------------------------------------------------------------------ sample level meter
+SampleMeter::SampleMeter (Controller& c, bool compactStyle) : ctl (c), compact (compactStyle)
+{
+    setTooltip ("Sample level: the audio input (while resampling: what you hear). Aim for peaks around -12 to -6 dB. "
+                "CLIP = it hit 0 dB and distorts - turn the source down. Click the meter to reset CLIP and the peak.");
+}
+
+void SampleMeter::tick()
+{
+    auto& e = ctl.engine;
+    fromOut = ctl.isSampling() && ! e.captureFromInput();
+    noInput = ! fromOut && e.inChannels.load() == 0;
+    const auto now = juce::Time::getMillisecondCounter();
+    bool changed = false;
+    // every meter on screen shows the same reading: the engine's peaks are collected once per screen update
+    static juce::uint32 readT = 0;
+    static float got[2][2] {};
+    if (now - readT >= 12)
+    {
+        readT = now;
+        for (int c = 0; c < 2; ++c) { got[0][c] = e.inPeak[(size_t) c].exchange (0.0f); got[1][c] = e.outPeak[(size_t) c].exchange (0.0f); }
+    }
+    for (int c = 0; c < 2; ++c)
+    {
+        const float v = got[fromOut ? 1 : 0][c];
+        const float nl = juce::jmax (v, lvl[c] * 0.82f);   // fast up, smooth fall
+        if (std::abs (nl - lvl[c]) > 1e-5f) changed = true;
+        lvl[c] = nl < 1e-5f ? 0.0f : nl;
+        if (v >= hold[c]) { hold[c] = v; holdT[c] = now; }
+        else if (now - holdT[c] > 1500) hold[c] *= 0.9f;   // the peak mark falls back after 1.5 s
+        if (v >= 0.989f) clip = true;                      // about -0.1 dB
+    }
+    if (changed || clip) repaint();
+}
+
+void SampleMeter::mouseDown (const juce::MouseEvent&)
+{
+    clip = false; hold[0] = hold[1] = 0;
+    repaint();
+}
+
+void SampleMeter::paint (juce::Graphics& g)
+{
+    auto pct = [] (float x) { return x <= 1e-6f ? 0.0f : juce::jlimit (0.0f, 1.0f, (20.0f * std::log10 (x) + 60.0f) / 60.0f); };
+    auto dbPct = [] (float db) { return juce::jlimit (0.0f, 1.0f, (db + 60.0f) / 60.0f); };
+    auto r = getLocalBounds();
+    g.setFont (mono (compact ? 9.5f : 10.5f, true));
+    // source label on the left, CLIP light + peak readout on the right
+    auto lab = r.removeFromLeft (compact ? 28 : 34);
+    g.setColour (fromOut ? C::rec : C::accent);
+    g.drawText (fromOut ? "OUT" : "IN", lab, juce::Justification::centredLeft);
+    auto clipBox = r.removeFromRight (compact ? 34 : 40).reduced (1, compact ? 0 : 2);
+    g.setColour (clip ? juce::Colour (0xffe5484d) : C::well);
+    g.fillRoundedRectangle (clipBox.toFloat(), 3.0f);
+    g.setColour (clip ? juce::Colours::white : C::mute);
+    g.drawText ("CLIP", clipBox, juce::Justification::centred);
+    r.removeFromRight (4);
+    auto txt = r.removeFromRight (compact ? 40 : 46);
+    const float pk = juce::jmax (hold[0], hold[1]);
+    g.setColour (clip ? juce::Colour (0xffe5484d) : C::fg);
+    g.drawText (pk > 1e-5f ? juce::String (20.0f * std::log10 (pk), 1) + " dB" : juce::String ("-inf"), txt, juce::Justification::centredRight);
+    r.removeFromRight (4);
+
+    juce::Rectangle<int> scale;
+    if (! compact && r.getHeight() >= 26) scale = r.removeFromBottom (10);
+    if (noInput)
+    {
+        g.setColour (C::well); g.fillRoundedRectangle (r.toFloat(), 2.5f);
+        g.setColour (C::mute); g.setFont (mono (compact ? 9.5f : 10.5f));
+        g.drawText ("No audio input - pick one in Audio / MIDI devices", r.reduced (4, 0), juce::Justification::centredLeft);
+        return;
+    }
+    auto bar = [&] (juce::Rectangle<int> b, float v, float h)
+    {
+        g.setColour (C::well); g.fillRoundedRectangle (b.toFloat(), 2.5f);
+        g.setColour (C::line); g.drawRoundedRectangle (b.toFloat(), 2.5f, 1.0f);
+        auto in = b.reduced (1);
+        // green to -12 dB, yellow to -3 dB, red above
+        const float x12 = dbPct (-12.0f), x3 = dbPct (-3.0f), p = pct (v);
+        auto seg = [&] (float a0, float a1, juce::Colour col)
+        {
+            const float s0 = juce::jmin (a0, p), s1 = juce::jmin (a1, p);
+            if (s1 <= s0) return;
+            g.setColour (col);
+            g.fillRect (juce::Rectangle<float> (in.getX() + in.getWidth() * s0, (float) in.getY(), in.getWidth() * (s1 - s0), (float) in.getHeight()));
+        };
+        seg (0.0f, x12, juce::Colour (0xff3ecf6a)); seg (x12, x3, C::accent); seg (x3, 1.0f, juce::Colour (0xffe5484d));
+        if (h > 1e-5f)   // peak hold mark
+        {
+            g.setColour (juce::Colours::white.withAlpha (0.85f));
+            g.fillRect (juce::Rectangle<float> (in.getX() + in.getWidth() * pct (h) - 1.0f, (float) in.getY(), 2.0f, (float) in.getHeight()));
+        }
+    };
+    const int gap = compact ? 1 : 2;
+    const int h = juce::jmax (3, (r.getHeight() - gap) / 2);
+    auto rl = r.removeFromTop (h); r.removeFromTop (gap); auto rr = r.removeFromTop (h);
+    bar (rl, lvl[0], hold[0]); bar (rr, lvl[1], hold[1]);
+    auto full = rl.getUnion (rr);
+    // threshold: sampling starts when the sound gets past this line
+    if (ctl.ui.smpThr && ! fromOut)
+    {
+        const float x = full.getX() + full.getWidth() * dbPct (ctl.ui.smpThrDb);
+        g.setColour (C::blue);
+        g.fillRect (juce::Rectangle<float> (x - 1.0f, (float) full.getY() - 1.0f, 2.0f, (float) full.getHeight() + 2.0f));
+    }
+    if (! scale.isEmpty())
+    {
+        g.setFont (mono (8.5f)); g.setColour (C::mute);
+        for (int db : { -48, -36, -24, -12, -6, -3, 0 })
+        {
+            const int x = scale.getX() + (int) (scale.getWidth() * dbPct ((float) db));
+            g.drawText (juce::String (db), x - 14, scale.getY(), 28, scale.getHeight(), juce::Justification::centred);
+        }
+    }
 }
 
 void VuMeter::paint (juce::Graphics& g)

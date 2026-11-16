@@ -32,9 +32,10 @@ struct Command
 struct EngineEvent
 {
     enum Type : int { None, RecHit, TransportCC, PitchKnob, ModWheel, Bend, KeyLight, OctFollow, Finished, CaptureFull, MidiIn, Transport,
-                      Learn, MapFire, PadSelect, LowKey };
+                      Learn, MapFire, PadSelect, LowKey, PitchKnobRel };
     Type type = None;
     int a = 0, b = 0, c = 0;
+    int ch = 0;                       // MIDI channel 0..15 (Learn, MapFire)
     float f = 0, g = 0;
     double pos = 0;
 };
@@ -82,6 +83,9 @@ public:
     std::array<std::atomic<float>, NPADS> padPeak;
     std::array<std::atomic<float>, NSEND> retPeak;
     std::atomic<float> masterPeak { 0 };
+    // sample level meter: audio input and output peaks, left / right (the meter reads and resets them)
+    std::array<std::atomic<float>, 2> inPeak {}, outPeak {};
+    std::atomic<int> inChannels { 0 };   // how many input channels the audio device gives us
     std::atomic<int> outLatency { 0 };
 
     // live values the UI may set directly
@@ -92,11 +96,18 @@ public:
     // ---- MIDI learn. Per note / CC number: -1 = normal behaviour, 1000+n = pad slot n of the current bank,
     //      2000+i = keyboard key i, 1 = a UI control (the event goes to the UI thread)
     static constexpr int MAP_NONE = -1, MAP_UI = 1, MAP_PAD = 1000, MAP_KEY = 2000;
-    std::array<std::atomic<int>, 128> noteMap, ccMap, pcMap;   // pcMap: program changes (buttons / pads only)
+    std::array<std::atomic<int>, 128> noteMap, ccMap, pcMap;   // any channel; pcMap: program changes (buttons / pads only)
+    std::array<std::array<std::atomic<int>, 128>, 16> noteMapCh, ccMapCh, pcMapCh;   // links learned on one MIDI channel (checked first)
+    // ---- controller profile (e.g. Akai MPK mini IV): pads on their own channel, endless knobs -> pitch knobs
+    std::atomic<int>  padChannel { 0 };            // 1..16; notes on this channel play the pads (0 = off)
+    std::array<std::atomic<int>, 16> padNotes;     // note for pads 1-8 (bank A) and 9-16 (bank B = next bank); -1 = none
+    std::array<std::atomic<int>, 8>  knobCC;       // CC of the 8 knobs (-1 = none)
+    std::atomic<bool> knobRelative { false };      // endless knobs in "Rel" mode (1..63 = up, 65..127 = down)
     std::atomic<bool>  learnArmed { false };      // next note-on / CC is reported as a Learn event, not played
     std::atomic<bool>  lowKeyLearn { false };     // next note-on becomes the keyboard's lowest key
     std::atomic<bool>  defaultTransportCC { true };
     std::atomic<int>   uiBank { 0 };
+    void injectMidiForTest (const juce::uint8* d, int sz) { handleMidi (d, sz, 0); }
 
     // live values the UI reads
     std::atomic<bool>  playing { false };
@@ -118,6 +129,7 @@ public:
     void requestCaptureStop();
     int  captureState() const { return capState.load(); }
     float captureLevel() const { return capLevel.load(); }
+    bool captureFromInput() const { return capInput; }
     double captureSeconds() const { return capLen.load() / sr; }
     // call once captureState() == CAP_STOPPED; returns the audio (or null) and resets to idle
     SamplePtr takeCapture();
@@ -227,6 +239,8 @@ private:
     void releasePad (int gi);
     void handleMapped (int target, bool isCC, int d1, int d2, bool on, bool off, int offset);
     std::array<int, 128> ccHeld {};
+    int mapCh = 0;
+    juce::uint32 lastStreamLedMs = 0;   // channel of the message being handled (for MapFire)
     void noteOn (int note, float vel, int tag, int offset);
     void noteOff (int note, int tag);
     juce::uint32 startVoice (const Snapshot& s, int padIdx, int chop, float semi, float gain, int trk, bool live,

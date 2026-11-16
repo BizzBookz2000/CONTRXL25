@@ -2,6 +2,10 @@
 // (c) 2026 Illahtainment. All rights reserved.
 #include "ui/MainComponent.h"
 
+#ifndef JUCE_APPLICATION_VERSION_STRING   // the Xcode (iPad) project doesn't pass it
+ #define JUCE_APPLICATION_VERSION_STRING "0.84.0"
+#endif
+
 class ContrxlApp : public juce::JUCEApplication
 {
 public:
@@ -29,6 +33,9 @@ public:
         }
         if (! files.isEmpty()) window->content->openFiles (files);
     }
+
+    // iPad: the app can be closed at any time once it is in the background, so save then
+    void suspended() override { if (window != nullptr) window->content->saveForBackground(); }
 
     void shutdown() override
     {
@@ -81,11 +88,17 @@ private:
         explicit MainWindow (ContrxlApp& a)
             : DocumentWindow ("CONTRXL 25", juce::Colours::black, DocumentWindow::allButtons), app (a)
         {
-            setUsingNativeTitleBar (true);
+            setUsingNativeTitleBar (true);   // on the iPad: no title bar at all, the app fills the screen
             shell = new Shell();
             content = &shell->main;
             content->applyUiScale();
             setContentOwned (shell, false);
+           #if CX_MOBILE
+            setFullScreen (true);
+            setVisible (true);
+            content->grabKeyboardFocus();
+            return;
+           #endif
             setResizable (true, true);
             setResizeLimits (640, 400, 8000, 6000);   // smaller than the layout is fine: it scrolls
             if (auto* d = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())

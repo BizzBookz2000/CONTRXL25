@@ -46,7 +46,7 @@ float KeyboardView::velAt (int key, float y) const
 
 void KeyboardView::light (int idx, int source, bool on)
 {
-    if (idx < 0 || idx >= 64) return;
+    if (idx < 0 || idx >= 128) return;
     const juce::uint8 bit = (juce::uint8) (1 << source);
     lit[(size_t) idx] = on ? (juce::uint8) (lit[(size_t) idx] | bit) : (juce::uint8) (lit[(size_t) idx] & ~bit);
     repaint();
@@ -57,7 +57,8 @@ void KeyboardView::paint (juce::Graphics& g)
     static const char* NAMES[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
     const auto L = layout();
     const Pad& p = ctl.selPad();
-    const bool chopMode = p.keyMode == MODE_CHOP;
+    const bool padMode = ctl.P.s.keyPads;             // each key plays a whole pad
+    const bool chopMode = ! padMode && p.keyMode == MODE_CHOP;
     const int n = p.numChops();
     const int KB = ctl.P.keyBase();
     auto drawKey = [&] (int i)
@@ -70,12 +71,16 @@ void KeyboardView::paint (juce::Graphics& g)
         auto r = k.r.reduced (k.black ? 0.0f : 1.0f, 0.0f);
         juce::Colour fill = k.black ? juce::Colour (0xff15161a) : juce::Colour (0xffe9e9ee);
         if (down) fill = C::accent;
+        const int kp = padMode ? ctl.P.s.padOnKey (i) : -1;
         if (chopMode && ! mapped && ! down) fill = fill.withAlpha (0.5f);
+        if (padMode && kp < 0 && ! down) fill = fill.withAlpha (0.5f);
+        if (i == dropKey) fill = C::blue;
         g.setColour (fill);
         g.fillRoundedRectangle (r.withTrimmedTop (-4.0f), 4.0f);
         g.setColour (juce::Colours::black.withAlpha (0.6f));
         g.drawRoundedRectangle (r.withTrimmedTop (-4.0f), 4.0f, 1.0f);
         if (mapped) { g.setColour (pal (kc)); g.fillRect (r.removeFromBottom (8.0f).reduced (2.0f, 0.0f)); }
+        if (kp >= 0) { g.setColour (pal (kp & 7)); g.fillRect (r.removeFromBottom (8.0f).reduced (2.0f, 0.0f)); }
         auto tr = k.r.reduced (2.0f, 4.0f);
         g.setFont (mono (9.0f));
         g.setColour (k.black ? C::mute : juce::Colour (0xff6b6d78));
@@ -83,10 +88,25 @@ void KeyboardView::paint (juce::Graphics& g)
         g.setFont (mono (k.black ? 9.0f : 10.0f, true));
         g.setColour (k.black ? C::fg : juce::Colour (0xff222222));
         juce::String label = mapped ? juce::String (kc + 1) : juce::String (NAMES[pc]) + ((pc == 0 || i == 0) ? juce::String (nn / 12 - 1) : juce::String());
-        if (! k.black || mapped) g.drawText (label, tr.removeFromBottom (k.black ? 12.0f : 22.0f), juce::Justification::centred);
+        if (padMode) label = kp >= 0 ? padLabel (kp) : juce::String();
+        if (! k.black || mapped || kp >= 0) g.drawText (label, tr.removeFromBottom (k.black ? 12.0f : 22.0f), juce::Justification::centred);
     };
     for (int i = 0; i < (int) L.size(); ++i) if (! L[(size_t) i].black) drawKey (i);
     for (int i = 0; i < (int) L.size(); ++i) if (L[(size_t) i].black) drawKey (i);
+}
+
+void KeyboardView::itemDropped (const SourceDetails& d)
+{
+    const int k = keyAt (d.localPosition.toFloat());
+    dropKey = -1; repaint();
+    if (k < 0) return;
+    const auto s = d.description.toString();
+    if (s.startsWith ("pad:")) ctl.setPadOnKey (k, s.fromFirstOccurrenceOf ("pad:", false, false).getIntValue());
+    else if (s.startsWith ("chop:"))   // a chop of the selected pad, dragged out of the waveform
+    {
+        if (ctl.P.s.keyPads) ctl.setKeysPlayPads (false);
+        ctl.assignChopKey (s.fromFirstOccurrenceOf ("chop:", false, false).getIntValue(), k);
+    }
 }
 
 void KeyboardView::mouseDown (const juce::MouseEvent& e)

@@ -35,6 +35,7 @@ struct UIState
     bool bakePitch = false;
     float stretchPct = 100; bool keepPitch = true; float sampleBpm = 90;
     bool smpThr = true, smpCount = false; float smpThrDb = -30;
+    int padToKey = -1;     // "Put on a key": the next key you press plays this pad
     int manualLearn = 0;   // 0 off, 1 = next pad hit receives the extract chop, 2 = next key
     int extractChop = 0;
     juce::String libCrate;   // crate selected in the library ("" = all crates)
@@ -61,6 +62,9 @@ public:
     // a learned button / knob / slider / bank control arrived (UI resolves the id and acts)
     std::function<void (const MidiTarget&, bool isCC, int value)> onMapFire;
     std::function<void()> onMidiMapChanged;
+    // a MIDI learn step finished (target, 0 note / 1 CC / 2 program change, number, channel 0-15) - used by the MPK setup
+    std::function<void (const MidiTarget&, int kind, int number, int channel)> onLearned;
+    void doAction (const juce::String& id);   // "playstop", "rec", "loop", "undo", ... (MIDI "action" links)
     juce::String statusText = "READY", exportStatus;
     bool unsaved = false;
     bool busy = false; float busyProgress = 0; juce::String busyLabel;
@@ -103,6 +107,9 @@ public:
     void loadFiles (const juce::Array<juce::File>& files, int startPad);
     void addLayers (const juce::Array<juce::File>& files);
     void startSampling (bool fromInput);
+    // where a new sample goes: the selected pad if it is empty, otherwise the next empty pad after it
+    // (on to the next banks, then round from A1). -1 = every pad is in use.
+    int padForNewSample() const;
     void stopSampling (bool cancel);
     bool isSampling() const { return engine.captureState() != Engine::CAP_IDLE; }
     bool capturingInput() const { return captureFromInput; }
@@ -118,6 +125,10 @@ public:
     void transientChops();
     void chopsToPads();
     void chopsToKeys();
+    // pads on keys: key 1 plays the first pad that has a sound, key 2 the next... (up to the number of keys)
+    void padsToKeys();
+    void setPadOnKey (int key, int gi);         // e.g. a pad dragged onto a key (gi -1 = clear that key)
+    void setKeysPlayPads (bool on);
     void selectChop (int c);
     void previewChop (int c);   // -1 = whole sample
     void stepRegion (int dir);  // , and . keys
@@ -167,6 +178,17 @@ public:
 
     // ---- transport
     void play(); void stop(); void toggleRec();
+    // a transport button on a controller: Play and Stop each toggle (press again = the other one),
+    // Record toggles recording. The same press arriving twice (e.g. a note AND an MMC message) counts once.
+    void transportPress (const juce::String& which);   // "play", "stop", "playstop", "rec"
+    bool playingNow() const;
+    // a transport control going down / up. Momentary buttons act on the press only; buttons that latch
+    // (send "on" at the 1st press and "off" at the 2nd, like the MPK mini IV's in some modes) act on both.
+    void transportEdge (const juce::String& which, const juce::String& control, bool down);
+    static bool isTransportId (const juce::String& id) { return id == "play" || id == "stop" || id == "playstop" || id == "rec"; }                           // includes a Play/Stop just sent to the audio thread
+    // a MIDI knob turning pitch knob k: absolute (0-127) or endless (+/- steps); endless is detected by itself
+    void turnPitchKnob (const juce::String& key, int k, int value, bool endless);
+    static int relativeDelta (int value);              // endless-knob value -> steps (0 = not a step)
     void setBpm (float v); void tapTempo();
     void setMasterVol (float v);
     void setLA (const std::function<void (LASettings&)>& fn);
@@ -215,6 +237,7 @@ public:
     bool midiLearn = false;
     std::optional<MidiTarget> learnTarget;                    // armed control waiting for MIDI
     juce::String lastMidi = "none yet";
+    void handleEventForTest (const EngineEvent& e) { handleEvent (e); }
     void setMidiLearn (bool on);
     void armLearn (const MidiTarget& t);
     void removeMidiLink (const juce::String& sig);
@@ -242,6 +265,7 @@ public:
     void toggleBypass (const SlotId& s);
     void pullPluginStates();                                    // live plug-in states -> model (before save / copy)
     PluginSetPtr clonePlugins (double sampleRate, int block);  // for offline renders
+    bool needPluginCopies (std::function<void()> again, int onlyPadInstrument = -1);
     juce::String slotStatus (const SlotId& s) const;            // "", "missing", "failed"
     void setPadPan (int gi, float v);
     void setPadSend (int gi, int k, float v);
@@ -278,9 +302,20 @@ private:
     SamplePtr previewSample;
     std::map<int, PluginNode*> freshNodes;   // created by setPlugin, waiting for syncPlugins
     std::set<int> failedIids;
+    // iPad (AUv3): plug-ins open asynchronously
+    std::set<int> openingIids;                                              // being opened for a slot
+    std::map<int, std::unique_ptr<juce::AudioPluginInstance>> spareInst;    // extra copies for offline renders
+    int sparesWanted = 0;
+    void installPlugin (const SlotId& s, const juce::PluginDescription& d, std::unique_ptr<juce::AudioPluginInstance> inst, const juce::String& err);
+    // true = some plug-ins still have to be opened for an offline render; `again` runs once they are
     void syncPlugins();
     void freshPluginCopies (Pad& p);
     bool ccPress (int cc, int value);
+    struct BtnSense { double downMs = -1e9; bool momentary = false; bool down = false; };
+    std::map<juce::String, BtnSense> btnSense;
+    struct KnobSense { int last = -1; bool rel = false; float before = 0, acc = 0; };
+    std::map<juce::String, KnobSense> knobSense;
+    double lastTransportMs = 0, lastPlayCmdMs = -1e9, recOnMs = 0; juce::String lastTransport; bool lastPlayCmd = false;
     std::unique_ptr<juce::Thread> stemThread;
 
     void timerCallback() override;

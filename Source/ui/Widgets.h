@@ -116,6 +116,23 @@ private:
     float L = 0, R = 0, pk = 0; juce::uint32 pkT = 0, clipT = 0;
 };
 
+// sample level meter: the audio input (or, while resampling, what CONTRXL 25 plays), left / right, -60..0 dB,
+// with a peak hold, a CLIP light that stays on until you click / tap the meter, and the threshold level marked
+class SampleMeter : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    explicit SampleMeter (Controller& c, bool compactStyle = false);
+    void tick();                         // ~30 times a second from the panel that shows it
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+private:
+    Controller& ctl;
+    bool compact;
+    float lvl[2] {}, hold[2] { 0, 0 };
+    juce::uint32 holdT[2] {};
+    bool clip = false, fromOut = false, noInput = false;
+};
+
 // LA-2A style gain reduction needle
 class VuMeter : public juce::Component
 {

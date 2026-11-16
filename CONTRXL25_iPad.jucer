@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<JUCERPROJECT id="CxIp25" name="CONTRXL25" projectType="guiapp" version="0.84.0" companyName="Illahtainment"
+              bundleIdentifier="com.illahtainment.contrxl25" useAppConfig="0" addUsingNamespaceToJuceHeader="0"
+              jucerFormatVersion="1" cppLanguageStandard="17" displaySplashScreen="0">
+  <MAINGROUP id="CxMain" name="CONTRXL25">
+    <GROUP id="{CX-ASSETS}" name="Assets">
+      <FILE id="CxIcon" name="icon.png" compile="0" resource="0" file="Assets/icon.png"/>
+    </GROUP>
+    <GROUP id="{CX-SOURCE}" name="Source">
+      <FILE id="9354fc" name="Main.cpp" compile="1" resource="0" file="Source/Main.cpp"/>
+      <GROUP id="{CX-d2a57d}" name="app">
+        <FILE id="d78c76" name="Controller.cpp" compile="1" resource="0" file="Source/app/Controller.cpp"/>
+        <FILE id="7cb2fd" name="Controller.h" compile="0" resource="0" file="Source/app/Controller.h"/>
+        <FILE id="3d0b3e" name="Platform.h" compile="0" resource="0" file="Source/app/Platform.h"/>
+        <FILE id="45ecac" name="PluginManager.cpp" compile="1" resource="0" file="Source/app/PluginManager.cpp"/>
+        <FILE id="af99d4" name="PluginManager.h" compile="0" resource="0" file="Source/app/PluginManager.h"/>
+      </GROUP>
+      <GROUP id="{CX-a9bfcb}" name="dsp">
+        <FILE id="a58ed3" name="Offline.cpp" compile="1" resource="0" file="Source/dsp/Offline.cpp"/>
+        <FILE id="d9a6f9" name="Offline.h" compile="0" resource="0" file="Source/dsp/Offline.h"/>
+        <FILE id="96963d" name="Stems.cpp" compile="1" resource="0" file="Source/dsp/Stems.cpp"/>
+        <FILE id="df6247" name="Stems.h" compile="0" resource="0" file="Source/dsp/Stems.h"/>
+      </GROUP>
+      <GROUP id="{CX-ad1943}" name="engine">
+        <FILE id="b35076" name="Effects.cpp" compile="1" resource="0" file="Source/engine/Effects.cpp"/>
+        <FILE id="81682d" name="Effects.h" compile="0" resource="0" file="Source/engine/Effects.h"/>
+        <FILE id="f42b4c" name="Engine.cpp" compile="1" resource="0" file="Source/engine/Engine.cpp"/>
+        <FILE id="84a8b1" name="Engine.h" compile="0" resource="0" file="Source/engine/Engine.h"/>
+        <FILE id="cd86b5" name="Plugins.cpp" compile="1" resource="0" file="Source/engine/Plugins.cpp"/>
+        <FILE id="70b83c" name="Plugins.h" compile="0" resource="0" file="Source/engine/Plugins.h"/>
+        <FILE id="e01ceb" name="Snapshot.cpp" compile="1" resource="0" file="Source/engine/Snapshot.cpp"/>
+        <FILE id="a90c5f" name="Snapshot.h" compile="0" resource="0" file="Source/engine/Snapshot.h"/>
+      </GROUP>
+      <GROUP id="{CX-f98ed0}" name="io">
+        <FILE id="2094a7" name="Library.cpp" compile="1" resource="0" file="Source/io/Library.cpp"/>
+        <FILE id="346b0f" name="Library.h" compile="0" resource="0" file="Source/io/Library.h"/>
+        <FILE id="1eb1aa" name="SongIO.cpp" compile="1" resource="0" file="Source/io/SongIO.cpp"/>
+        <FILE id="6d976e" name="SongIO.h" compile="0" resource="0" file="Source/io/SongIO.h"/>
+      </GROUP>
+      <GROUP id="{CX-20f35e}" name="model">
+        <FILE id="daa49e" name="Model.cpp" compile="1" resource="0" file="Source/model/Model.cpp"/>
+        <FILE id="8e2c04" name="Model.h" compile="0" resource="0" file="Source/model/Model.h"/>
+      </GROUP>
+      <GROUP id="{CX-7d5c00}" name="ui">
+        <FILE id="e678ae" name="ChopEditor.cpp" compile="1" resource="0" file="Source/ui/ChopEditor.cpp"/>
+        <FILE id="0ae131" name="ChopEditor.h" compile="0" resource="0" file="Source/ui/ChopEditor.h"/>
+        <FILE id="7b23e8" name="KeyboardView.cpp" compile="1" resource="0" file="Source/ui/KeyboardView.cpp"/>
+        <FILE id="247a77" name="KeyboardView.h" compile="0" resource="0" file="Source/ui/KeyboardView.h"/>
+        <FILE id="8a23e3" name="LookAndFeel.cpp" compile="1" resource="0" file="Source/ui/LookAndFeel.cpp"/>
+        <FILE id="5d6ad3" name="LookAndFeel.h" compile="0" resource="0" file="Source/ui/LookAndFeel.h"/>
+        <FILE id="2a8ed5" name="MainComponent.cpp" compile="1" resource="0" file="Source/ui/MainComponent.cpp"/>
+        <FILE id="daa01d" name="MainComponent.h" compile="0" resource="0" file="Source/ui/MainComponent.h"/>
+        <FILE id="799767" name="MidiLearn.cpp" compile="1" resource="0" file="Source/ui/MidiLearn.cpp"/>
+        <FILE id="31f5a5" name="MidiLearn.h" compile="0" resource="0" file="Source/ui/MidiLearn.h"/>
+        <FILE id="a8bea6" name="Mixer.cpp" compile="1" resource="0" file="Source/ui/Mixer.cpp"/>
+        <FILE id="70629e" name="Mixer.h" compile="0" resource="0" file="Source/ui/Mixer.h"/>
+        <FILE id="0994be" name="Panels.cpp" compile="1" resource="0" file="Source/ui/Panels.cpp"/>
+        <FILE id="0b1de6" name="Panels.h" compile="0" resource="0" file="Source/ui/Panels.h"/>
+        <FILE id="93b375" name="PluginBrowser.cpp" compile="1" resource="0" file="Source/ui/PluginBrowser.cpp"/>
+        <FILE id="c8262a" name="PluginBrowser.h" compile="0" resource="0" file="Source/ui/PluginBrowser.h"/>
+        <FILE id="84d193" name="SequencerView.cpp" compile="1" resource="0" file="Source/ui/SequencerView.cpp"/>
+        <FILE id="828319" name="SequencerView.h" compile="0" resource="0" file="Source/ui/SequencerView.h"/>
+        <FILE id="4c95cb" name="WaveformView.cpp" compile="1" resource="0" file="Source/ui/WaveformView.cpp"/>
+        <FILE id="070c64" name="WaveformView.h" compile="0" resource="0" file="Source/ui/WaveformView.h"/>
+        <FILE id="bde783" name="Widgets.cpp" compile="1" resource="0" file="Source/ui/Widgets.cpp"/>
+        <FILE id="a16f4b" name="Widgets.h" compile="0" resource="0" file="Source/ui/Widgets.h"/>
+        <FILE id="aca4b3" name="WindowStyle.cpp" compile="1" resource="0" file="Source/ui/WindowStyle.cpp"/>
+        <FILE id="93d059" name="WindowStyle.h" compile="0" resource="0" file="Source/ui/WindowStyle.h"/>
+      </GROUP>
+    </GROUP>
+  </MAINGROUP>
+  <MODULES>
+    <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_processors_headless" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_dsp" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  </MODULES>
+  <JUCEOPTIONS JUCE_PLUGINHOST_AU="1" JUCE_PLUGINHOST_VST3="0" JUCE_PLUGINHOST_LADSPA="0" JUCE_PLUGINHOST_LV2="0"
+               JUCE_USE_MP3AUDIOFORMAT="1" JUCE_WEB_BROWSER="0" JUCE_USE_CURL="0"/>
+  <EXPORTFORMATS>
+    <XCODE_IPHONE targetFolder="Builds/iOS" iosDeviceFamily="2" iPadScreenOrientation="UIInterfaceOrientationLandscapeLeft,UIInterfaceOrientationLandscapeRight" iosScreenOrientation="UIInterfaceOrientationLandscapeLeft,UIInterfaceOrientationLandscapeRight"
+                  UIRequiresFullScreen="1" UIStatusBarHidden="1" UIFileSharingEnabled="1" UISupportsDocumentBrowser="1"
+                  microphonePermissionNeeded="1" microphonePermissionsText="CONTRXL 25 records from your audio input when you press Sample."
+                  iosBluetoothPermissionNeeded="1" iosBluetoothPermissionText="CONTRXL 25 uses Bluetooth to connect Bluetooth MIDI keyboards and pad controllers."
+                  iosBackgroundAudio="1" smallIcon="CxIcon" bigIcon="CxIcon"
+                  extraDefs="JUCE_SILENCE_XCODE_15_LINKER_WARNING=1" extraLinkerFlags="-Wl,-weak_reference_mismatches,weak">
+      <CONFIGURATIONS>
+        <CONFIGURATION isDebug="1" name="Debug" headerPath="../../Source" iosDeploymentTarget="15.0"/>
+        <CONFIGURATION isDebug="0" name="Release" headerPath="../../Source" iosDeploymentTarget="15.0" optimisation="3"/>
+      </CONFIGURATIONS>
+      <MODULEPATHS>
+        <MODULEPATH id="juce_audio_basics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors_headless" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="JUCE/modules"/>
+        <MODULEPATH id="juce_core" path="JUCE/modules"/>
+        <MODULEPATH id="juce_data_structures" path="JUCE/modules"/>
+        <MODULEPATH id="juce_dsp" path="JUCE/modules"/>
+        <MODULEPATH id="juce_events" path="JUCE/modules"/>
+        <MODULEPATH id="juce_graphics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="JUCE/modules"/>
+      </MODULEPATHS>
+    </XCODE_IPHONE>
+  </EXPORTFORMATS>
+</JUCERPROJECT>

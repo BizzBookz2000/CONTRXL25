@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(CONTRXL25 VERSION 0.75.0 LANGUAGES C CXX)
+project(CONTRXL25 VERSION 0.84.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -38,7 +38,7 @@ juce_add_gui_app(CONTRXL25
     PRODUCT_NAME        "CONTRXL 25"
     COMPANY_NAME        "Illahtainment"
     BUNDLE_ID           "com.illahtainment.contrxl25"
-    VERSION             "0.75.0"
+    VERSION             "0.84.0"
     ICON_BIG            "${CMAKE_CURRENT_SOURCE_DIR}/Assets/icon.png"
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT "CONTRXL 25 records from your audio input when you press Sample.")
@@ -92,8 +92,14 @@ target_link_libraries(CONTRXL25
         juce::juce_dsp
         juce::juce_gui_extra
     PUBLIC
-        juce::juce_recommended_config_flags
-        juce::juce_recommended_lto_flags)
+        juce::juce_recommended_config_flags)
+
+# Link-time optimisation makes the final link step take a very long time (10+ minutes with
+# MSVC) for almost no audible gain, so it is off unless you ask for it: -DCONTRXL_LTO=ON
+option(CONTRXL_LTO "Whole-program optimisation (much slower final link)" OFF)
+if(CONTRXL_LTO)
+    target_link_libraries(CONTRXL25 PUBLIC juce::juce_recommended_lto_flags)
+endif()
 
 # Optional headless engine test (no window, no audio device):
 #   cmake -B build -DCONTRXL_BUILD_TESTS=ON

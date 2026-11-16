@@ -47,6 +47,9 @@ Engine::Engine()
     for (auto& m : noteMap) m.store (MAP_NONE);
     for (auto& m : ccMap) m.store (MAP_NONE);
     for (auto& m : pcMap) m.store (MAP_NONE);
+    for (auto* tbl : { &noteMapCh, &ccMapCh, &pcMapCh }) for (auto& row : *tbl) for (auto& m : row) m.store (MAP_NONE);
+    for (auto& n : padNotes) n.store (-1);
+    for (auto& k : knobCC) k.store (-1);
     for (auto& f : fxPtr) f.store (nullptr);
     for (auto& h : padHits) h.store (0);
     for (auto& p : padPeak) p.store (0);
@@ -470,9 +473,34 @@ void Engine::noteOn (int idx, float vel, int tag, int offset)
 {
     if (! cur) return;
     const Snapshot& s = *cur;
+    if (s.s.keyPads)
+    {
+        // pads on keys: this key plays a whole pad at its own pitch, like hitting the pad
+        const int gi = s.s.padOnKey (idx);
+        if (gi < 0 || gi >= NPADS) return;
+        const RPad& kp = s.pads[(size_t) gi];
+        const float g = gainOf (vel);
+        juce::uint32 tid = 0;
+        if (kp.has)
+        {
+            if (! kp.muted && s.s.choke) releaseLive (0.02f);
+            tid = startVoice (s, gi, -1, 0, g, -1, true, 0, -1, false);
+        }
+        if (auto* in = instAt (gi); in != nullptr && ! kp.muted && tag >= 0 && tag < 3)
+        {
+            auto& k = keyInst[(size_t) tag][(size_t) (idx & 255)];
+            if (k != 0) { if (auto* o = instAt ((k - 1) / 128)) o->addNote ((k - 1) % 128, 0, curOffset); }
+            const int note = instNote (kp, 0);
+            in->addNote (note, s.s.vel ? juce::jlimit (1, 127, (int) std::round (vel)) : 100, curOffset);
+            k = gi * 128 + note + 1;
+        }
+        recordHit (gi, -1, 0, g, offset);
+        if (tag >= 0 && tag < 3) held[(size_t) tag][(size_t) (idx & 255)] = tid;
+        return;
+    }
     const int sel = juce::jlimit (0, NPADS - 1, s.s.sel);
     const RPad& p = s.pads[(size_t) sel];
-    const int KB = s.s.keys == 32 ? 53 : 48;
+    const int KB = keyBaseFor (s.s.keys);
     const int m = KB + idx + 12 * appOct.load();
     const float g = gainOf (vel);
     juce::uint32 tid = 0;
@@ -572,7 +600,7 @@ void Engine::hitPadLive (int gi, float vel, int chop, float semi, bool record, i
 
 void Engine::handleMapped (int t, bool isCC, int d1, int d2, bool on, bool off, int offset)
 {
-    if (t >= MAP_KEY && t < MAP_KEY + 64)
+    if (t >= MAP_KEY && t < MAP_KEY + 128)
     {
         const int idx = t - MAP_KEY;
         auto& held = isCC ? ccHeld[(size_t) d1] : midiHeld[(size_t) d1];
@@ -606,7 +634,13 @@ void Engine::handleMapped (int t, bool isCC, int d1, int d2, bool on, bool off, 
     // a button, knob, slider or bank: the UI thread does it
     if (on || isCC)
     {
-        EngineEvent e; e.type = EngineEvent::MapFire; e.a = isCC ? 1 : 0; e.b = d1; e.c = d2;
+        EngineEvent e; e.type = EngineEvent::MapFire; e.a = isCC ? 1 : 0; e.b = d1; e.c = d2; e.ch = mapCh;
+        emit (e);
+    }
+    else if (off)
+    {
+        // a note released: transport buttons that latch (on = first press, off = second press) need it
+        EngineEvent e; e.type = EngineEvent::MapFire; e.a = 0; e.b = d1; e.c = 0; e.f = 1.0f; e.ch = mapCh;
         emit (e);
     }
 }
@@ -616,9 +650,20 @@ void Engine::handleMidi (const juce::uint8* d, int sz, int offset)
     if (sz < 1) return;
     const int st0 = d[0];
     if (st0 == 0xF8 || st0 == 0xFE) return;
-    EngineEvent led; led.type = EngineEvent::MidiIn;
-    led.a = st0; led.b = sz > 1 ? d[1] : -1; led.c = sz > 2 ? d[2] : -1;
-    emit (led);
+    {
+        // pads with pressure (aftertouch), knobs and wheels send a stream of messages: report those to the
+        // screen at most every 40 ms, so they can't flood the event queue (that made pads feel late / stuck)
+        const int hi = st0 & 0xF0;
+        const bool stream = hi == 0xA0 || hi == 0xD0 || hi == 0xB0 || hi == 0xE0;
+        const auto nowMs = juce::Time::getMillisecondCounter();
+        if (! stream || nowMs - lastStreamLedMs >= 40)
+        {
+            if (stream) lastStreamLedMs = nowMs;
+            EngineEvent led; led.type = EngineEvent::MidiIn;
+            led.a = st0; led.b = sz > 1 ? d[1] : -1; led.c = sz > 2 ? d[2] : -1;
+            emit (led);
+        }
+    }
     if (st0 == 0xFA || st0 == 0xFB) { EngineEvent e; e.type = EngineEvent::Transport; e.a = 1; emit (e); return; }
     if (st0 == 0xFC) { EngineEvent e; e.type = EngineEvent::Transport; e.a = 2; emit (e); return; }
     if (st0 == 0xF0)
@@ -627,47 +672,81 @@ void Engine::handleMidi (const juce::uint8* d, int sz, int offset)
         {
             const int c = d[4];
             EngineEvent e; e.type = EngineEvent::Transport;
-            e.a = (c == 2 || c == 3) ? 1 : c == 1 ? 2 : (c == 6 || c == 0x44) ? 3 : 0;
+            e.a = (c == 2 || c == 3) ? 1 : c == 1 ? 2 : (c == 6 || c == 0x44) ? 3 : c == 7 ? 4 : 0;
             if (e.a) emit (e);
         }
         return;
     }
     if (sz < 2) return;
-    const int st = st0 & 0xF0, d1 = d[1] & 127, d2 = sz > 2 ? d[2] : 0;
+    const int st = st0 & 0xF0, d1 = d[1] & 127, d2 = sz > 2 ? d[2] : 0, ch = st0 & 15;
+    // a link learned on this channel wins over one learned on any channel
+    auto look = [ch, d1] (const std::array<std::array<std::atomic<int>, 128>, 16>& perCh, const std::array<std::atomic<int>, 128>& any)
+    {
+        const int t = perCh[(size_t) ch][(size_t) d1].load (std::memory_order_relaxed);
+        return t != MAP_NONE ? t : any[(size_t) d1].load (std::memory_order_relaxed);
+    };
     const bool on = st == 0x90 && d2 > 0, off = st == 0x80 || (st == 0x90 && d2 == 0), cc = st == 0xB0;
     // MIDI learn: report the control instead of playing it
     const bool pc = st == 0xC0;   // program change: some controllers' buttons send these
     if (learnArmed.load() && (on || cc || pc))
     {
-        EngineEvent e; e.type = EngineEvent::Learn; e.a = cc ? 1 : pc ? 2 : 0; e.b = d1; e.c = d2; emit (e);
+        EngineEvent e; e.type = EngineEvent::Learn; e.a = cc ? 1 : pc ? 2 : 0; e.b = d1; e.c = d2; e.ch = ch; emit (e);
         return;
     }
     if (pc)
     {
-        const int t = pcMap[(size_t) d1].load (std::memory_order_relaxed);
+        const int t = look (pcMapCh, pcMap);
         if (t >= MAP_PAD && t < MAP_PAD + 8) handleMapped (t, true, d1, 127, true, false, offset);
-        else if (t != MAP_NONE) { EngineEvent e; e.type = EngineEvent::MapFire; e.a = 2; e.b = d1; e.c = 127; emit (e); }
+        else if (t != MAP_NONE) { EngineEvent e; e.type = EngineEvent::MapFire; e.a = 2; e.b = d1; e.c = 127; e.ch = ch; emit (e); }
         return;
     }
     // "set low key": this note becomes the lowest key on screen
     if (lowKeyLearn.load() && on && cur)
     {
-        const int KB = cur->s.keys == 32 ? 53 : 48;
+        const int KB = keyBaseFor (cur->s.keys);
         midiOffset.store (KB - d1); hwOct.store (0); lowKeyLearn.store (false);
         EngineEvent e; e.type = EngineEvent::LowKey; e.a = d1; emit (e);
         return;
     }
     // learned links win over the built-in behaviour
+    mapCh = ch;
     if (on || off)
     {
-        const int t = noteMap[(size_t) d1].load (std::memory_order_relaxed);
+        const int t = look (noteMapCh, noteMap);
         if (t != MAP_NONE) { handleMapped (t, false, d1, d2, on, off, offset); return; }
     }
     if (cc)
     {
-        const int t = ccMap[(size_t) d1].load (std::memory_order_relaxed);
+        const int t = look (ccMapCh, ccMap);
         if (t != MAP_NONE) { handleMapped (t, true, d1, d2, d2 > 0, d2 == 0, offset); return; }
     }
+    // controller profile: notes on the pad channel play the pads (bank A = this bank, bank B = the next bank)
+    if ((on || off) && padChannel.load (std::memory_order_relaxed) == ch + 1)
+    {
+        if (on)
+            for (int k = 0; k < 16; ++k)
+                if (padNotes[(size_t) k].load (std::memory_order_relaxed) == d1)
+                {
+                    const int gi = ((uiBank.load() + (k >= 8 ? 1 : 0)) % 8) * 8 + (k & 7);
+                    hitPadLive (gi, (float) d2, -1, 0, true, offset, true);
+                    midiPadHeld[(size_t) d1] = gi + 1;
+                    EngineEvent e; e.type = EngineEvent::PadSelect; e.a = gi; emit (e);
+                    break;
+                }
+        if (off && midiPadHeld[(size_t) d1] != 0) { releasePad (midiPadHeld[(size_t) d1] - 1); midiPadHeld[(size_t) d1] = 0; }
+        return;   // pad-channel notes never play the keys
+    }
+    // controller profile: the 8 knobs turn the 8 pitch knobs (absolute or endless / relative)
+    if (cc)
+        for (int k = 0; k < 8; ++k)
+            if (knobCC[(size_t) k].load (std::memory_order_relaxed) == d1)
+            {
+                EngineEvent e;
+                if (knobRelative.load()) { e.type = EngineEvent::PitchKnobRel; e.a = k; e.b = d2; }
+                else { e.type = EngineEvent::PitchKnob; e.a = k; e.b = d2; }
+                emit (e);
+                return;
+            }
     if (cc && isTransportCC (d1) && defaultTransportCC.load())
     {
         EngineEvent e; e.type = EngineEvent::TransportCC; e.a = d1; e.b = d2; emit (e);
@@ -676,7 +755,7 @@ void Engine::handleMidi (const juce::uint8* d, int sz, int offset)
     if (st == 0x90 && d2 > 0)
     {
         if (! cur) return;
-        const int NK = cur->s.keys, KB = NK == 32 ? 53 : 48;
+        const int NK = cur->s.keys, KB = keyBaseFor (NK);
         int r = d1 + midiOffset.load() - KB;
         int idx;
         if (followOct.load())
@@ -737,6 +816,7 @@ void Engine::handleMidi (const juce::uint8* d, int sz, int offset)
     }
     else if ((st == 0xD0 || st == 0xA0) && cur)
     {
+        if (padChannel.load (std::memory_order_relaxed) == ch + 1) return;   // the MPK's pad pressure: not for the keys' instrument
         if (auto* in = instAt (cur->s.sel))
             in->addMidi (st == 0xD0 ? juce::MidiMessage::channelPressureChange (1, d1) : juce::MidiMessage::aftertouchChange (1, d1, d2), curOffset);
     }
@@ -1233,6 +1313,21 @@ void Engine::process (const float* const* in, int numIn, float* const* out, int 
             o = meterR.load();       while (b > o && ! meterR.compare_exchange_weak (o, b)) {}
             const float m = std::max (a, b);
             o = masterPeak.load();   while (m > o && ! masterPeak.compare_exchange_weak (o, m)) {}
+            o = outPeak[0].load();   while (a > o && ! outPeak[0].compare_exchange_weak (o, a)) {}
+            o = outPeak[1].load();   while (b > o && ! outPeak[1].compare_exchange_weak (o, b)) {}
+            // the audio input, always (so the level can be set before sampling)
+            const int nIn = in != nullptr ? juce::jmin (2, numIn) : 0;
+            int live = 0;
+            for (int c = 0; c < 2; ++c)
+            {
+                const float* src = c < nIn ? in[c] : (nIn > 0 ? in[0] : nullptr);   // mono input: both bars
+                if (src == nullptr) continue;
+                ++live;
+                const auto mm = juce::FloatVectorOperations::findMinAndMax (src + chunkStart, n);
+                const float p = std::max (mm.getEnd(), -mm.getStart());
+                o = inPeak[(size_t) c].load(); while (p > o && ! inPeak[(size_t) c].compare_exchange_weak (o, p)) {}
+            }
+            inChannels.store (live > 0 ? nIn : 0, std::memory_order_relaxed);
         }
 
         // output

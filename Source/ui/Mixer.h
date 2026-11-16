@@ -69,7 +69,7 @@ public:
 private:
     juce::OwnedArray<Btn> banks;
     juce::OwnedArray<ChannelStrip> strips;
-    Btn bPlugins { "Plug-ins...", "Scan for VST3 plug-ins and see the list" };
+    Btn bPlugins { "Plug-ins...", "Scan for " + cx::pluginKind() + " plug-ins and see the list" };
     juce::Label title, hint;
 };
 } // namespace cx::ui

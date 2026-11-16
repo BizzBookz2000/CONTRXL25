@@ -7,6 +7,7 @@
 
 #include <juce_core/juce_core.h>
 #include <juce_audio_basics/juce_audio_basics.h>
+#include "app/Platform.h"
 #include <array>
 #include <memory>
 #include <optional>
@@ -21,6 +22,15 @@ constexpr int MAXT    = 64;    // max tracks
 constexpr int MAXSTEP = 128;   // 8 bars of 16ths
 constexpr int MAXLAY  = 8;     // layers per pad
 constexpr float PR    = 24.0f; // pitch knob range +/- semitones
+
+// keyboard sizes: 25 / 32 keys, or any size from 25 to 88 (a keyboard of your own)
+constexpr int MIN_KEYS = 25, MAX_KEYS = 88;
+inline int validKeys (int n) { return juce::jlimit (MIN_KEYS, MAX_KEYS, n); }
+// the first key's pitch class (32 keys start on F, 76 on E, 88 on A, the rest on C)
+inline int keyShiftFor (int n) { return n == 32 ? 5 : n == 88 ? 9 : n == 76 ? 4 : 0; }
+// the first key's MIDI note: 25 / 32 / 37 keys start around C3, 49 / 61 at C2, bigger ones lower
+inline int keyBaseFor (int n) { return (n <= 37 ? 48 : n <= 61 ? 36 : n <= 76 ? 24 : 12) + keyShiftFor (n); }
+
 constexpr int TPS     = 24;    // unquantized ticks per step
 
 inline juce::String padLabel (int i) { return juce::String::charToString ((juce::juce_wchar) ('A' + (i >> 3))) + juce::String ((i & 7) + 1); }
@@ -150,6 +160,7 @@ struct Pad
     std::array<float, NSEND> send {};
 
     int numChops() const { return buf ? (int) markers.size() + 1 : 0; }
+    bool hasSound() const { return buf != nullptr || ! layers.empty() || ! inst.empty(); }   // sample, layers or an instrument
     int chopForKey (int key) const
     {
         if (! hasKmap) return key;
@@ -213,6 +224,10 @@ struct Settings
     int pat = 0;                      // current pattern
     int sel = 0;                      // selected pad
     float mvol = 0.85f;
+    // "Pads on keys": each key plays a whole pad (a kit across the keyboard) instead of the selected pad
+    bool keyPads = false;
+    std::array<int, 128> keyPad {};   // per key: pad index + 1 (0 = this key plays nothing)
+    int padOnKey (int k) const { return k >= 0 && k < 128 ? keyPad[(size_t) k] - 1 : -1; }
 };
 
 struct LibItem { int id = 0; juce::String name, crate; SamplePtr buf; };
@@ -237,8 +252,8 @@ struct Project
     Project();
     void reset();
     float bpmOf (int p) const { return pbpm[(size_t) p] > 0 ? (float) pbpm[(size_t) p] : s.bpm; }
-    int keyBase() const { return s.keys == 32 ? 53 : 48; }   // KB()
-    int keyShift() const { return s.keys == 32 ? 5 : 0; }
+    int keyBase() const { return keyBaseFor (s.keys); }   // KB()
+    int keyShift() const { return keyShiftFor (s.keys); }
 };
 
 // segments (in seconds) of a sample cut at the given markers

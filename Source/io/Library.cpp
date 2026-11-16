@@ -17,6 +17,9 @@ static juce::String legalPath (const juce::String& path)
 
 juce::File Library::defaultRoot()
 {
+   #if CX_MOBILE
+    return userFilesFolder().getChildFile ("Library");   // iPad: Files app > On My iPad > CONTRXL 25 > Library
+   #endif
     return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("CONTRXL25").getChildFile ("Library");
 }
 

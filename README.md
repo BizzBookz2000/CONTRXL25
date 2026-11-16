@@ -64,6 +64,8 @@ To try a newer JUCE release: `-DCONTRXL_JUCE_VERSION=8.0.x`.
 | `Build step for juce failed` (from FetchContent) | Old versions of the script let CMake download JUCE. Use the current `build_windows.bat`, delete the `build-ninja` folder, and run it again. |
 | Download of JUCE fails | Check the internet connection / firewall, or download `JUCE-8.0.12.zip` from github.com/juce-framework/JUCE/releases, unzip it, rename the folder to `JUCE` and put it next to `CMakeLists.txt`. |
 | `The build tools for Visual Studio 2022 (v143) cannot be found` or `could not find any instance of Visual Studio` | A Visual Studio generator for a different year was used. Use the current `build_windows.bat` (it builds with Ninja + your installed compiler) and delete any old `build` folder. |
+| `ninja: error: manifest 'build.ninja' still dirty after 100 tries` | Some files are dated in the future (zip from another time zone, or a wrong PC clock). The current `build_windows.bat` fixes the dates itself; otherwise wait a few hours or check the PC clock, then delete `build-ninja` and run again. |
+| `tar: ... Can't restore time` while unpacking JUCE | Harmless - the script checks JUCE is complete and carries on. |
 | Path too long errors | Move the folder to something short like `C:\dev\CONTRXL25`. |
 | Build worked but no sound | Click **Audio / MIDI** in the app and pick your output device. "Windows Audio (Exclusive Mode)" gives the lowest latency. |
 
@@ -130,6 +132,33 @@ Nothing there = that MIDI input is switched off, or the button sends on another 
 (A25, M32...) have a second port named "... DAW" for their transport — switch it on in the MIDI window's input list,
 then learn the buttons. "MMC" or "Start" messages work automatically; anything else can be learned. One control can be
 learned from several keyboards (e.g. PLAY on both the A25 and the M32).
+
+### Your own keyboard (25 to 88 keys)
+
+Pick **Your own keyboard...** in the keyboard box and type how many keys it has. The on-screen keys, MIDI, chop mode
+and the **chop to** buttons follow (a 49-key keyboard gets a **49** button: 49 equal chops, one per key). If the lowest
+key on your keyboard doesn't play the first key on screen, use **MIDI... > Set low key**.
+
+### Akai MPK mini 3 ("25 keys 3")
+
+Pick **25 keys 3**. A short setup asks you to hit pads 1-8 and turn knobs 1-8 (keep the MPK on Bank A with CC and
+Prog Change off). Then the pads play this bank (Bank B = the next bank) and the knobs turn the pitch knobs. The mini 3
+has no transport buttons - use Space or MIDI Learn other controls for play / stop.
+
+### Akai MPK mini IV ("25 keys IV")
+
+Pick **25 keys IV** in the keyboard box (top bar). The first time, a short **MPK mini IV setup** window opens and asks
+you to press each control once: Stop/Play, Record, Overdub, Loop, Undo, pads 1-8 and knobs 1-8 (Skip anything you
+don't use). After that:
+
+* The 8 pads play the 8 pads of the bank on screen; **Bank B** on the MPK plays the *next* bank (e.g. A1-A8 + B1-B8).
+  Pad notes never play the on-screen keys, so the keys and pads can share a MIDI channel only if you skip the pads step.
+* The 8 knobs turn the 8 pitch knobs. Endless knobs are recognised automatically (2 clicks = 1 semitone); you can
+  also tick *Knobs are endless* in the setup window.
+* Transport buttons toggle: Play again stops, Stop again plays, Record again turns recording off.
+* Transport buttons send on the MPK's **DAW / Software Control** port: switch on every *MPK mini IV* input in the
+  MIDI window. Links are learned per MIDI channel, so they don't collide with the keys.
+* Run the setup again any time with **MPK mini IV setup...** in the MIDI window. Pick **25 keys** to switch the profile off.
 
 ### The library
 

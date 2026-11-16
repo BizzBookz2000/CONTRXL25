@@ -152,8 +152,17 @@ if errorlevel 1 goto :jucefail
 echo Unpacking JUCE...
 if exist "JUCE-%JUCEVER%" rmdir /s /q "JUCE-%JUCEVER%"
 tar -xf juce_download.zip
+rem tar can complain about a few files JUCE's build never uses (very long paths, links in the
+rem examples) - that's fine as long as the parts we need are there
+call :jucecheck "JUCE-%JUCEVER%"
+if not errorlevel 1 goto :unpacked
+echo   tar could not unpack everything - trying with PowerShell instead...
+if exist "JUCE-%JUCEVER%" rmdir /s /q "JUCE-%JUCEVER%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Expand-Archive -LiteralPath 'juce_download.zip' -DestinationPath '.' -Force"
+call :jucecheck "JUCE-%JUCEVER%"
 if errorlevel 1 goto :jucefail
-if not exist "JUCE-%JUCEVER%\CMakeLists.txt" goto :jucefail
+:unpacked
+echo   JUCE unpacked OK.
 if exist juce_download.zip del /q juce_download.zip
 :renamejuce
 rem an old, empty or broken "JUCE" folder is in the way: move it aside
@@ -166,6 +175,10 @@ if errorlevel 1 goto :jucefail
 set "JUCEPATH=%~dp0JUCE"
 :havejuce
 echo Using JUCE in "%JUCEPATH%"
+
+rem ---- files dated in the future (a zip made in another time zone, or a wrong PC clock) make Ninja
+rem      re-run CMake forever ("build.ninja still dirty"): give them the current time
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$now=Get-Date; $n=0; Get-ChildItem -LiteralPath '%~dp0.' -Recurse -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt $now } | ForEach-Object { try { $_.LastWriteTime=$now; $n++ } catch {} }; if ($n) { Write-Host ('Fixed the date of ' + $n + ' file(s) that were dated in the future.') }"
 
 rem ---- configure + build (own folder, so an old failed "build" folder can't interfere)
 cmake -S . -B build-ninja -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl "-DJUCE_DIR=%JUCEPATH%"
@@ -210,3 +223,13 @@ echo  Common fixes are listed in README.md (section "If something goes wrong").
 echo.
 pause
 exit /b 1
+
+rem ---- does folder %1 hold everything the build needs from JUCE? (errorlevel 0 = yes)
+:jucecheck
+if not exist "%~1\CMakeLists.txt" exit /b 1
+if not exist "%~1\extras\Build\CMake\JUCEUtils.cmake" exit /b 1
+if not exist "%~1\extras\Build\juceaide\CMakeLists.txt" exit /b 1
+for %%M in (juce_core juce_events juce_data_structures juce_graphics juce_gui_basics juce_gui_extra juce_audio_basics juce_audio_devices juce_audio_formats juce_audio_processors juce_audio_utils juce_dsp) do (
+    if not exist "%~1\modules\%%M\%%M.h" exit /b 1
+)
+exit /b 0

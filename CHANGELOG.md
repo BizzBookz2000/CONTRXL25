@@ -1,5 +1,87 @@
 # Changelog
 
+## 0.84.0
+- **Pads on keys** (Windows, iPad and web): a third key mode, **PADS** ("a pad on each key"), next to KEYS and
+  CHOP. Each key plays a whole pad at its own pitch - like a drum kit across the keyboard - and records onto the
+  sequencer as that pad.
+  - **Pads > keys** (under the mode buttons, and in a pad's menu): key 1 = the first pad that has a sound, key 2
+    the next... 8 pads fill 8 keys, 16 fill 16, up to as many keys as your keyboard has (25, 32, or your own size).
+    Empty pads are skipped.
+  - **Drag a pad onto a key** to put it there (Windows/iPad: drag the pad; web: hold the pad, then drag). Dragging
+    a chop out of the waveform onto a key puts that chop on that key.
+  - **Put on a key...** in a pad's menu (right-click / hold): then press the key - on screen, QWERTY or MIDI.
+  - Keys show which pad they play; moving / swapping pads keeps each key on the same sound. KEYS or CHOP switch
+    back to the selected pad (the pad map is kept for PADS); **Clear keys** clears it. Saved in songs; undo works.
+
+## 0.83.0
+- **Sample never records over a sample**: if the selected pad already has a sound (a sample, layers or an
+  instrument), Sample records into the next empty pad - on through the banks, then round from A1 - and selects it.
+  An empty selected pad is used as before. Resample does the same but keeps your selected pad selected (you may be
+  playing it). If all 64 pads are in use it says so and doesn't record. (Windows, iPad and web.)
+
+## 0.82.0
+- **Sample level meter** (Windows, iPad and the web version): left / right bars from -60 to 0 dB (green to -12,
+  yellow to -3, red above), a peak mark that holds for 1.5 s with its dB value, and a **CLIP** light that stays on
+  until you click / tap the meter. It shows the audio input all the time, so you can set the level before you
+  press Sample; while resampling it switches to **OUT** (what you hear). The blue line is the threshold level when
+  Threshold is on. It sits right above Load / Sample / Resample in the sample window, and bigger in Sound > Sampling.
+  "No audio input" shows when the audio device has no input. Web version: **Monitor** turns the input meter on
+  before sampling (the browser asks for input permission once).
+
+## 0.81.0 - iPad
+- **iPad version**: `CONTRXL25_iPad.jucer` + a ready Xcode project in `Builds/iOS` (see README_iPad.md).
+  Same source code as Windows, with the iPad differences in `Source/app/Platform.h` (`CX_MOBILE`):
+  - AUv3 plug-ins instead of VST3 (they open in the background; offline renders - bounce, export, stems,
+    auto-sample - first get their own copies of the AUv3s ready, then run).
+  - Hold a finger on anything that has a right-click menu to open it.
+  - Library, songs and exports live in the app's folder, visible in the Files app (On My iPad > CONTRXL 25).
+  - Bluetooth MIDI pairing button in the MIDI window. Full-screen landscape, touch-sized window title bars.
+  - Library, settings and an autosave of an unsaved song are written when the app goes to the background.
+- Windows: plug-ins that need asynchronous loading are handled the same way (none of the usual VST3s do).
+
+## 0.80.0
+- MPK mini 3 pads felt late and "stuck": their pressure (aftertouch) sends a stream of messages while a pad is held,
+  and each one was reported to the screen - thousands per second filled the event queue, so pad selections and
+  lights arrived late or got lost. Now streams (pressure, knobs, wheels) are reported at most every 40 ms, pad
+  pressure on the pad channel is ignored (it was also being sent to the keys' VST instrument), and a burst of pad
+  hits re-selects the pad once per screen update instead of once per hit.
+
+## 0.79.0
+- **25 keys 3** (Akai MPK mini 3) in the keyboard box: its 8 pads play the pads (Bank B = the next bank) and its
+  8 knobs turn the pitch knobs. A short setup (pads + knobs, no transport - the mini 3 has none) opens the first
+  time; run it again with **MPK setup...** in the MIDI window. The joystick bends pitch / sends mod as before.
+- **Your own keyboard...** in the keyboard box: type how many keys your keyboard has (25 to 88). The on-screen
+  keyboard, MIDI, chop mode and auto-sampling follow it, and the **chop to** buttons get one more button with
+  that number (e.g. 49 = 49 equal chops, one per key). Bigger keyboards start lower (49 / 61 keys at C2, 88 at A0);
+  MIDI... > Set low key fixes any offset. The computer keyboard still plays the first 32 keys.
+- Loading a song keeps the keyboard you play on (it is your hardware, not part of the song).
+
+## 0.78.0
+- Transport toggling also works with buttons that **latch** - the ones that send "on" at the first push and "off" at
+  the second push (the MPK mini IV's transport buttons in some modes). The app tells them apart from ordinary push
+  buttons by itself: a quick release = push button (only presses count), a release that comes at the next push =
+  latching button (the "off" is the second press).
+
+## 0.77.0
+- Controller transport buttons toggle: **Play** again = stop, **Stop** again = play, **Record** again = recording off.
+  Works for MIDI Learn links to the on-screen Play / Stop / Rec, the MPK setup, built-in transport CCs and MMC /
+  MIDI Start-Stop. One press that arrives twice (e.g. a note and an MMC message) counts once. (Mouse clicks on the
+  on-screen buttons work as before.)
+- Pitch knobs from a controller reach every value in between again: endless knobs (like the MPK mini IV's, which
+  send 1 / 127 "steps") are recognised automatically after two clicks - 2 clicks = 1 semitone - instead of jumping
+  to -24 / +24. Absolute knobs work as before. Applies to the MPK profile and to knobs linked with MIDI Learn.
+
+## 0.76.0
+- **25 keys IV** (Akai MPK mini IV) in the keyboard box: a guided setup links Stop/Play, Record, Overdub, Loop and
+  Undo, pads 1-8 and knobs 1-8 with one press each (or Skip). Pads play this bank, Bank B the next bank; knobs turn
+  the pitch knobs (absolute, or endless "Rel" mode). Re-run it from the MIDI window (**MPK mini IV setup...**).
+- MIDI Learn links now remember the MIDI channel ("Note 60 ch10"), so two keyboards or a keyboard's keys and its
+  buttons can't clash. Older links (any channel) keep working.
+- Learned links can run actions directly (Play/Stop toggle, Record, Loop, Undo...).
+- build_windows.bat: no longer stops on tar's harmless "Can't restore time" messages when unpacking JUCE (PowerShell
+  fallback if something is really missing), and fixes files dated in the future, which made Ninja loop with
+  "build.ninja still dirty after 100 tries".
+
 ## 0.75.0
 - Live recording with several armed tracks:
   - A hit now goes to the armed track that plays that pad (e.g. track 2 = A2), even if another armed track is

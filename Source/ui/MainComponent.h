@@ -67,6 +67,9 @@ class MainComponent : public juce::Component, public Dialogs, public juce::DragA
 public:
     MainComponent();
     ~MainComponent() override;
+    // iPad: the app went to the background (it may be closed without warning): save settings, the library,
+    // and an unsaved song as "Autosave - <name>.zip" in Songs
+    void saveForBackground();
     void resized() override;
     void paint (juce::Graphics&) override;
     bool keyPressed (const juce::KeyPress&) override;
@@ -91,6 +94,10 @@ public:
     void togglePopSection() override;
     bool isSectionPopped() const override { return tabsWin != nullptr; }
     void showMidiSettings() override;
+    void setControllerProfile (int p) override;
+    int controllerProfile() const override { return profile; }
+    void showMpkSetup() override;
+    void askCustomKeys() override;
     void showTab (const juce::String& name) override;
     void openPluginEditor (const SlotId& s);
     void showPluginList();
@@ -151,8 +158,12 @@ private:
     juce::TooltipWindow tips { this, 600 };
 
     std::map<int, int> qwertyDown;   // key code -> key index
-    std::unique_ptr<PopOutWindow> seqWin, kbWin, chopWin, tabsWin, midiWin;
+    std::unique_ptr<PopOutWindow> seqWin, kbWin, chopWin, tabsWin, midiWin, mpkWin;
+    int profile = 0;   // 0 none, 1 MPK mini IV, 2 MPK mini 3
+    juce::String profKey (const char* name) const { return juce::String (profile == 2 ? "mpk3" : "mpk") + name; }
+    void applyMpkProfile();
     std::unique_ptr<LearnOverlay> learnMain;
+    std::unique_ptr<juce::MouseListener> longPress;   // iPad: hold = right-click
     std::map<PluginNode*, std::unique_ptr<juce::DocumentWindow>> editorWins;
     std::unique_ptr<PopOutWindow> pluginListWin;
     std::map<juce::String, bool> ccButtonDown;      // learned CC buttons fire once per press

@@ -16,7 +16,7 @@ private:
     Controller& ctl;
     SlotId slot;
     juce::TextEditor search;
-    Btn bInst { "Instruments" }, bFx { "Effects" }, bScan { "Scan for VST3 plug-ins...", "Find new or updated plug-ins" }, bLoad { "Load" };
+    Btn bInst { "Instruments" }, bFx { "Effects" }, bScan { "Scan for " + cx::pluginKind() + " plug-ins...", "Find new or updated plug-ins" }, bLoad { "Load" };
     juce::ListBox list { "plugins", this };
     juce::Label info;
     juce::Array<juce::PluginDescription> rows;

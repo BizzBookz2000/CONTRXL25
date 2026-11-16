@@ -28,6 +28,12 @@ struct Dialogs
     // UI size (percent, 0 = fit the screen automatically)
     virtual void showMidiSettings() = 0;
     virtual void showTab (const juce::String& name) = 0;
+    // controller profiles: 0 none, 1 "25 keys IV" (Akai MPK mini IV), 2 "25 keys 3" (Akai MPK mini 3):
+    // pads on their channel, knobs -> pitch knobs (+ transport on the IV)
+    virtual void setControllerProfile (int profile) = 0;
+    virtual int controllerProfile() const = 0;
+    virtual void showMpkSetup() = 0;
+    virtual void askCustomKeys() = 0;              // "Your own keyboard...": type how many keys it has
     virtual void toggleMidiLearn() = 0;
     virtual void setUiScale (int percent) = 0;
     virtual int  getUiScale() const = 0;
@@ -64,6 +70,7 @@ private:
         bMidi { "MIDI...", "MIDI settings: learned links, which input plays notes, low key, built-in transport CCs, MIDI monitor" };
     bool showTag = true;
     juce::ComboBox kbBox, sizeBox;
+    int kbKeys = -1;
     juce::Slider master; juce::Label lMaster, lKb, lSize;
     Meter meter;
     juce::uint32 ledT = 0;
@@ -84,6 +91,7 @@ private:
     juce::Slider bpm; juce::Label lBpm;
     std::array<PitchKnob, 8> knobs;
     WaveformView wave { ctl };
+    SampleMeter smpMeter { ctl, true };   // input level, right above Sample / Resample
     Btn bPrev { "<", "Previous region" }, bNext { ">", "Next region" }, bPlaySmp { "Play", "Play the selected region (or the whole sample)" },
         bTrim { "Trim", "Trim the sample: drag the green handles, then Apply" }, bTrimOk { "Apply", "Commit the trim (Ctrl+Z undoes)" },
         bTrimX { "Cancel", "Leave the sample untouched" }, bZoomIn { "+", "Zoom in (mouse wheel)" }, bZoomOut { "-", "Zoom out" },
@@ -139,6 +147,8 @@ private:
     juce::OwnedArray<Btn> banks;
     juce::OwnedArray<PadButton> pads;
     Btn bKeys { "1 - KEYS\nPitch across keys" }, bChop { "2 - CHOP\nKeys play chops" },
+        bPadKeys { "PADS\nA pad per key", "Keys play pads: each key plays a whole pad (fill it with Pads > keys, or drag a pad onto a key)" },
+        bPadsToKeys { "Pads > keys", "Put your pads on the keys in order: key 1 = the first pad with a sound, key 2 the next... up to the number of keys" },
         bGate { "Gate", "ON: a note stops when you let go. OFF: the sample plays out" },
         bVel { "Vel", "Velocity changes the level" },
         bChoke { "Choke", "ON: a new hit cuts off what you are playing. OFF: hits ring together" },
@@ -171,6 +181,7 @@ private:
             smpBpm { "Sample BPM", 40, 240, 0.5, [] (double v) { return juce::String (v, 1); } };
     juce::ComboBox bits, rate, retro, mg, lg;
     juce::Label lBits, lRate, lRetro, lMg, lLg, retroDesc, laGr, smpInfo, strInfo;
+    SampleMeter smpMeter { ctl };
     VuMeter vu;
 };
 

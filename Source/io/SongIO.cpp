@@ -148,6 +148,14 @@ bool saveSong (const Project& p, const juce::File& zipFile, juce::String& error)
     pj->setProperty ("name", p.name); pj->setProperty ("bpm", p.s.bpm); pj->setProperty ("kb", p.s.keys);
     pj->setProperty ("loop", p.s.loop); pj->setProperty ("metro", p.s.metro); pj->setProperty ("quant", p.s.quant);
     pj->setProperty ("count", p.s.count); pj->setProperty ("vel", p.s.vel); pj->setProperty ("choke", p.s.choke);
+    {
+        // pads on keys (the web version reads the same: keyPad[i] = pad index or -1)
+        juce::Array<juce::var> kp; int last = -1;
+        for (int k = 0; k < 128; ++k) if (p.s.keyPad[(size_t) k] != 0) last = k;
+        for (int k = 0; k <= last; ++k) kp.add (p.s.keyPad[(size_t) k] - 1);
+        pj->setProperty ("keyPads", p.s.keyPads);
+        if (last >= 0) pj->setProperty ("keyPad", kp);
+    }
     pj->setProperty ("root", p.s.root); pj->setProperty ("gate", p.s.gate); pj->setProperty ("mode", p.pads[(size_t) p.s.sel].keyMode == MODE_CHOP ? "chop" : "keys");
     pj->setProperty ("sel", p.s.sel); pj->setProperty ("autoNorm", p.s.autoNorm); pj->setProperty ("song", p.s.song); pj->setProperty ("pat", p.s.pat);
     { juce::Array<juce::var> a, b; for (int i = 0; i < NPAT; ++i) { a.add (p.plen[(size_t) i]); b.add (p.pbpm[(size_t) i]); } pj->setProperty ("plen", a); pj->setProperty ("pbpm", b); }
@@ -444,8 +452,7 @@ bool loadSong (const juce::File& zipFile, Project& P, juce::String& message)
         }
 
     np.s.song = (bool) pj.getProperty ("song", false) && ! np.chain.empty();
-    const int kb = (int) pj.getProperty ("kb", P.s.keys);
-    np.s.keys = (kb == 32 ? 32 : 25);
+    np.s.keys = P.s.keys;   // the keyboard you play on stays (it's hardware, not part of the song)
     np.s.loop = (bool) pj.getProperty ("loop", true);
     np.s.metro = (bool) pj.getProperty ("metro", false);
     np.s.quant = (bool) pj.getProperty ("quant", false);
@@ -453,6 +460,14 @@ bool loadSong (const juce::File& zipFile, Project& P, juce::String& message)
     np.s.vel = (bool) pj.getProperty ("vel", true);
     np.s.choke = (bool) pj.getProperty ("choke", true);
     np.s.gate = (bool) pj.getProperty ("gate", false);
+    np.s.keyPad.fill (0);
+    if (auto* kp = pj.getProperty ("keyPad", {}).getArray())
+        for (int k = 0; k < juce::jmin (128, kp->size()); ++k)
+        {
+            const int gi = (int) kp->getReference (k);
+            np.s.keyPad[(size_t) k] = gi >= 0 && gi < NPADS ? gi + 1 : 0;
+        }
+    np.s.keyPads = (bool) pj.getProperty ("keyPads", false);
     np.s.autoNorm = (bool) pj.getProperty ("autoNorm", true);
     np.s.root = (int) pj.getProperty ("root", 60);
     np.s.mode = pj.getProperty ("mode", "keys").toString() == "chop" ? MODE_CHOP : MODE_KEYS;

@@ -90,6 +90,232 @@ int main()
     check (stepsIn (3, 2) == 2 && stepsIn (0, 2) == 4 && stepsIn (1, 2) == 1, "Rec all armed: every armed track records the hit");
     ctl.ui.recAllArmed = false;
 
+    // ---- MIDI: channel-specific links, MPK mini IV profile (pads on a channel, knobs, transport actions)
+    {
+        auto send = [&] (int st, int d1, int d2) { const juce::uint8 m[3] { (juce::uint8) st, (juce::uint8) d1, (juce::uint8) d2 }; engine.injectMidiForTest (m, 3); };
+        auto drain = [&] (EngineEvent::Type want, int& a) { EngineEvent e; bool got = false; while (engine.pop (e)) { if (e.type == want && ! got) { a = e.a; got = true; } ctl.handleEventForTest (e); } return got; };
+        int a = -1;
+        ctl.midiMap.clear();
+        ctl.midiMap["n93.4"] = MidiTarget { "action", 0, "playstop", "MPK Stop/Play" };
+        ctl.pushMidiMap();
+        ctl.statusText = {};
+        send (0x93, 93, 127); drain (EngineEvent::MapFire, a);
+        check (ctl.statusText.startsWith ("PLAY"), "a transport button learned on channel 4 runs Play/Stop");
+        ctl.statusText = {};
+        send (0x90, 93, 127); drain (EngineEvent::MapFire, a);
+        check (ctl.statusText.isEmpty(), "the same note on another channel does not");
+        check (Controller::sigName ("n93.4").contains ("ch4"), "link names show the channel");
+
+        engine.padChannel.store (10);
+        for (int k = 0; k < 16; ++k) engine.padNotes[(size_t) k].store (36 + k);
+        ctl.ui.bank = 0; engine.uiBank.store (0);
+        a = -1; send (0x99, 38, 100);
+        check (drain (EngineEvent::PadSelect, a) && a == 2, "pad channel: note 38 plays pad 3 of this bank");
+        send (0x89, 38, 0);
+        a = -1; send (0x99, 45, 100);
+        check (drain (EngineEvent::PadSelect, a) && a == 9, "bank B pad 2 plays pad 2 of the next bank");
+        send (0x89, 45, 0);
+        a = -1; send (0x90, 38, 100);
+        check (! drain (EngineEvent::PadSelect, a), "the same note on the keys channel stays a key");
+
+        for (int k = 0; k < 8; ++k) engine.knobCC[(size_t) k].store (70 + k);
+        engine.knobRelative.store (false);
+        ctl.ui.bank = 0; engine.uiBank.store (0);
+        send (0xB0, 71, 127); drain (EngineEvent::PitchKnob, a);
+        check (P.pads[1].pitch > 0, "knob 2 (absolute) turns pad 2's pitch up");
+        engine.knobRelative.store (true);
+        const float p0 = P.pads[2].pitch;
+        for (int i = 0; i < 4; ++i) { send (0xB0, 72, 1); drain (EngineEvent::PitchKnobRel, a); }
+        check (P.pads[2].pitch == p0 + 2, "endless knob 3: 4 clicks up = +2 st");
+        for (int i = 0; i < 2; ++i) { send (0xB0, 72, 127); drain (EngineEvent::PitchKnobRel, a); }
+        check (P.pads[2].pitch == p0 + 1, "endless knob 3: 2 clicks down = -1 st");
+        // an endless knob in "absolute" mode: detected after 2 identical messages, no jump to -24 / +24
+        engine.knobRelative.store (false);
+        const float p3 = P.pads[3].pitch;
+        for (int i = 0; i < 6; ++i) { send (0xB0, 73, 1); drain (EngineEvent::PitchKnob, a); }
+        check (P.pads[3].pitch == p3 + 3, "endless knob found by itself: 6 clicks = +3 st (got " + juce::String (P.pads[3].pitch) + ")");
+        for (int i = 0; i < 4; ++i) { send (0xB0, 73, 127); drain (EngineEvent::PitchKnob, a); }
+        check (P.pads[3].pitch == p3 + 1, "and 4 clicks back = -2 st");
+        // an absolute knob reaches the middle
+        for (int v : { 20, 40, 64 }) { send (0xB0, 74, v); drain (EngineEvent::PitchKnob, a); }
+        check (std::abs (P.pads[4].pitch) <= 1, "absolute knob in the middle = about 0 st (got " + juce::String (P.pads[4].pitch) + ")");
+        send (0xB0, 74, 96); drain (EngineEvent::PitchKnob, a);
+        check (P.pads[4].pitch > 10 && P.pads[4].pitch < 14, "absolute knob at 3/4 = about +12 st");
+
+        // transport buttons toggle
+        ctl.midiMap["n90.4"] = MidiTarget { "action", 0, "play", "Play" };
+        ctl.midiMap["n91.4"] = MidiTarget { "action", 0, "stop", "Stop" };
+        ctl.midiMap["n92.4"] = MidiTarget { "action", 0, "rec", "Rec" };
+        ctl.pushMidiMap();
+        auto press = [&] (int n) { send (0x93, n, 127); drain (EngineEvent::MapFire, a); send (0x83, n, 0); drain (EngineEvent::MapFire, a); };
+        // (no audio device here, so each press comes 0.2 s after the last: past the double-press guard, inside the "just sent" window)
+        auto pressT = [&] (int n) { juce::Thread::sleep (200); press (n); };
+        ctl.stop(); juce::Thread::sleep (420);
+        pressT (90); check (ctl.playingNow(), "Play starts");
+        pressT (90); check (! ctl.playingNow(), "Play again stops");
+        pressT (91); check (ctl.playingNow(), "Stop while stopped starts");
+        pressT (91); check (! ctl.playingNow(), "Stop stops");
+        pressT (92); const bool r1 = ctl.ui.rec; pressT (92);
+        check (r1 && ! ctl.ui.rec, "Record again turns recording off");
+        // a latching button: 1st push sends note on, 2nd push sends note off
+        ctl.midiMap["n94.4"] = MidiTarget { "action", 0, "play", "Play" };
+        ctl.midiMap["n95.4"] = MidiTarget { "action", 0, "rec", "Rec" };
+        ctl.pushMidiMap();
+        ctl.stop(); juce::Thread::sleep (420);
+        send (0x93, 94, 127); drain (EngineEvent::MapFire, a);
+        check (ctl.playingNow(), "latching Play: on = play");
+        juce::Thread::sleep (380);
+        send (0x83, 94, 0); drain (EngineEvent::MapFire, a);
+        check (! ctl.playingNow(), "latching Play: off (2nd push) = stop");
+        if (ctl.ui.rec) ctl.toggleRec();
+        send (0x93, 95, 127); drain (EngineEvent::MapFire, a); juce::Thread::sleep (380);
+        const bool lr = ctl.ui.rec;
+        send (0x93, 95, 0); drain (EngineEvent::MapFire, a);
+        check (lr && ! ctl.ui.rec, "latching Record: 2nd push turns recording off");
+        ctl.stop(); juce::Thread::sleep (200);
+        // a momentary button: quick release does nothing
+        send (0x93, 90, 127); drain (EngineEvent::MapFire, a); send (0x83, 90, 0); drain (EngineEvent::MapFire, a);
+        check (ctl.playingNow(), "momentary Play: release doesn't stop it");
+        ctl.stop(); juce::Thread::sleep (420);
+        // a press sent twice (a note and MMC) counts once
+        ctl.stop(); juce::Thread::sleep (420);
+        send (0x93, 90, 127); drain (EngineEvent::MapFire, a);
+        { const juce::uint8 mmc[6] { 0xF0, 0x7F, 0x7F, 0x06, 0x02, 0xF7 }; engine.injectMidiForTest (mmc, 6); EngineEvent e; while (engine.pop (e)) ctl.handleEventForTest (e); }
+        check (ctl.playingNow(), "note + MMC play from one press = play (not play then stop)");
+        ctl.stop();
+        // pad pressure (aftertouch) floods: they must not bury the pad hits
+        {
+            engine.padChannel.store (10);
+            ctl.ui.bank = 0; engine.uiBank.store (0);
+            for (int i = 0; i < 3000; ++i) send (0xA9, 37, i & 127);
+            a = -1; send (0x99, 37, 100);
+            int queued = 0; EngineEvent e; bool sel = false;
+            while (engine.pop (e)) { ++queued; if (e.type == EngineEvent::PadSelect && e.a == 1) sel = true; }
+            check (sel && queued < 50, "3000 pad-pressure messages: the pad hit still gets through (" + juce::String (queued) + " events queued)");
+            send (0x89, 37, 0); while (engine.pop (e)) {}
+        }
+        engine.padChannel.store (0);
+        for (auto& k : engine.knobCC) k.store (-1);
+    }
+
+    // ---- your own keyboard size: 49 keys
+    {
+        check (keyBaseFor (25) == 48 && keyBaseFor (32) == 53 && keyBaseFor (49) == 36 && keyBaseFor (61) == 36 && keyBaseFor (88) == 21,
+               "first-key notes: 25 = C3, 32 = F3, 49 / 61 = C2, 88 = A0");
+        ctl.setKeyboard (49);
+        check (P.s.keys == 49, "keyboard set to 49 keys");
+        ctl.setKeyboard (200); check (P.s.keys == 88, "too many keys is capped at 88");
+        ctl.setKeyboard (49);
+        juce::AudioBuffer<float> b (1, 49000); b.clear();
+        ctl.P.s.sel = 0; ctl.P.pads[0].buf = makeSample (std::move (b), 44100.0); ctl.publish();
+        ctl.equalChops (49);
+        check (P.pads[0].numChops() == 49, "chop to 49: 49 equal chops");
+        ctl.chopsToKeys();
+        check (P.pads[0].keyMode == MODE_CHOP && ctl.statusText.contains ("1-49"), "all 49 chops fit on the keys");
+        ctl.publish();
+        int a = -1;
+        auto keyLight = [&] (int note)
+        {
+            const juce::uint8 m[3] { 0x90, (juce::uint8) note, 100 }; engine.injectMidiForTest (m, 3);
+            const juce::uint8 o[3] { 0x80, (juce::uint8) note, 0 }; engine.injectMidiForTest (o, 3);
+            EngineEvent e; int got = -1; while (engine.pop (e)) { if (e.type == EngineEvent::KeyLight && e.b == 1 && got < 0) got = e.a; ctl.handleEventForTest (e); }
+            return got;
+        };
+        engine.prepare (44100, 256);
+        { juce::AudioBuffer<float> out (2, 256); juce::MidiBuffer mb; engine.process (nullptr, 0, out.getArrayOfWritePointers(), 2, 256, mb); }
+        engine.followOct.store (false); engine.midiOffset.store (0); engine.appOct.store (0); P.s.oct = 0;
+        a = keyLight (36); check (a == 0, "49 keys: MIDI note 36 (C2) = key 1 (got " + juce::String (a) + ")");
+        a = keyLight (84); check (a == 48, "49 keys: MIDI note 84 (C6) = key 49 (got " + juce::String (a) + ")");
+        ctl.setKeyboard (25);
+    }
+
+    // ---- sample level meter: the engine measures the audio input all the time
+    {
+        engine.prepare (44100, 256);
+        juce::AudioBuffer<float> inB (2, 256), out (2, 256);
+        for (int i = 0; i < 256; ++i) { inB.setSample (0, i, 0.5f * std::sin (i * 0.1f)); inB.setSample (1, i, -0.25f * std::sin (i * 0.1f)); }
+        juce::MidiBuffer mb;
+        engine.inPeak[0].store (0); engine.inPeak[1].store (0);
+        engine.process (inB.getArrayOfReadPointers(), 2, out.getArrayOfWritePointers(), 2, 256, mb);
+        const float l = engine.inPeak[0].exchange (0), r = engine.inPeak[1].exchange (0);
+        check (std::abs (l - 0.5f) < 0.01f && std::abs (r - 0.25f) < 0.01f, "input meter: left 0.5 / right 0.25 (got " + juce::String (l) + " / " + juce::String (r) + ")");
+        check (engine.inChannels.load() == 2, "input meter: 2 input channels");
+        const float* mono[1] { inB.getReadPointer (0) };
+        engine.process (mono, 1, out.getArrayOfWritePointers(), 2, 256, mb);
+        check (engine.inPeak[1].exchange (0) > 0.49f, "mono input shows on both bars");
+        engine.process (nullptr, 0, out.getArrayOfWritePointers(), 2, 256, mb);
+        check (engine.inChannels.load() == 0, "no input device: the meter says so");
+    }
+
+    // ---- Sample records into the next empty pad, never over a sample
+    {
+        for (auto& pd : P.pads) { pd.buf.reset(); pd.layers.clear(); pd.inst = {}; }
+        juce::AudioBuffer<float> b1 (1, 1000); b1.clear();
+        P.pads[3].buf = makeSample (std::move (b1), 44100.0);
+        P.pads[4].buf = P.pads[3].buf;
+        ctl.selectPad (3);
+        check (ctl.padForNewSample() == 5, "A4 has a sample (A5 too): the next empty pad is A6");
+        ctl.selectPad (2);
+        check (ctl.padForNewSample() == 2, "an empty selected pad is used as it is");
+        P.pads[63].buf = P.pads[3].buf; ctl.selectPad (63);
+        check (ctl.padForNewSample() == 0, "H8 in use: goes round to A1");
+        for (auto& pd : P.pads) pd.buf = P.pads[3].buf;
+        check (ctl.padForNewSample() == -1, "all 64 pads in use: nowhere to sample");
+        ctl.startSampling (true);
+        check (! ctl.isSampling() && ctl.statusText.contains ("ALL 64 PADS"), "...and Sample says so instead of recording over one");
+        for (auto& pd : P.pads) pd.buf.reset();
+        ctl.selectPad (0);
+    }
+
+    // ---- pads on keys
+    {
+        for (auto& pd : P.pads) { pd.buf.reset(); pd.layers.clear(); pd.inst = {}; }
+        juce::AudioBuffer<float> b1 (1, 4000); for (int i = 0; i < 4000; ++i) b1.setSample (0, i, 0.3f * std::sin (i * 0.05f));
+        auto smp = makeSample (std::move (b1), 44100.0);
+        ctl.setKeyboard (25);
+        for (int gi : { 0, 1, 2, 3, 4, 5, 6, 7 }) P.pads[(size_t) gi].buf = smp;
+        ctl.padsToKeys();
+        check (P.s.keyPads && P.s.padOnKey (0) == 0 && P.s.padOnKey (7) == 7 && P.s.padOnKey (8) == -1, "8 pads -> keys 1-8");
+        for (int gi = 8; gi < 16; ++gi) P.pads[(size_t) gi].buf = smp;
+        ctl.padsToKeys();
+        check (P.s.padOnKey (15) == 15 && P.s.padOnKey (16) == -1, "16 pads -> keys 1-16 (B1-B8 on keys 9-16)");
+        for (int gi = 16; gi < 40; ++gi) P.pads[(size_t) gi].buf = smp;
+        ctl.padsToKeys();
+        check (P.s.padOnKey (24) == 24 && P.s.padOnKey (25) == -1 && ctl.statusText.contains ("MORE THAN"), "40 pads on 25 keys: the first 25, and it says so");
+        ctl.setKeyboard (61); ctl.padsToKeys();
+        check (P.s.padOnKey (39) == 39 && P.s.padOnKey (40) == -1, "61 keys: all 40 pads fit");
+        ctl.setKeyboard (25);
+        for (int gi = 0; gi < NPADS; ++gi) if (gi != 3 && gi != 20) P.pads[(size_t) gi].buf.reset();
+        ctl.padsToKeys();
+        check (P.s.padOnKey (0) == 3 && P.s.padOnKey (1) == 20, "gaps are skipped: A4 on key 1, C5 on key 2");
+        ctl.setPadOnKey (5, 20);
+        check (P.s.padOnKey (5) == 20, "a pad dropped on key 6 plays from key 6");
+        ctl.movePad (20, 30, false);
+        check (P.s.padOnKey (1) == 30 && P.s.padOnKey (5) == 30, "moving a pad: its keys follow it");
+        // the engine: key 1 plays pad A4
+        engine.prepare (44100, 256);
+        juce::AudioBuffer<float> out (2, 256); juce::MidiBuffer mb;
+        engine.process (nullptr, 0, out.getArrayOfWritePointers(), 2, 256, mb);
+        const auto h3 = engine.padHits[3].load(), hs = engine.padHits[(size_t) P.s.sel].load();
+        ctl.noteOn (0, 100, 0);
+        engine.process (nullptr, 0, out.getArrayOfWritePointers(), 2, 256, mb);
+        check (engine.padHits[3].load() == h3 + 1, "key 1 plays A4");
+        check (out.getMagnitude (0, 256) > 0.01f, "...and it sounds");
+        ctl.noteOff (0, 0);
+        // a song keeps the map
+        auto f = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("cx_keypads.zip");
+        juce::String err; io::saveSong (P, f, err);
+        Project q; juce::String msg; io::loadSong (f, q, msg);
+        check (q.s.keyPads && q.s.padOnKey (0) == 3 && q.s.padOnKey (5) == 30, "saved in the song");
+        f.deleteFile();
+        ctl.setMode (MODE_KEYS);
+        check (! P.s.keyPads && P.s.padOnKey (0) == 3, "KEYS mode turns pads-on-keys off (the map stays for PADS)");
+        ctl.setKeysPlayPads (true); check (P.s.keyPads, "PADS turns it back on");
+        ctl.clearKeys(); check (! P.s.keyPads && P.s.padOnKey (0) == -1, "Clear keys clears it");
+        juce::ignoreUnused (hs);
+        for (auto& pd : P.pads) pd.buf.reset();
+    }
+
     std::cout << (fails == 0 ? "ALL PASSED" : "FAILURES: " + std::to_string (fails)) << std::endl;
     return fails == 0 ? 0 : 1;
 }

@@ -115,7 +115,7 @@ SnapshotPtr SnapshotBuilder::build (const Project& p, const dsp::StemStore& stem
         r.hasKmap = pad.hasKmap;
         r.keyMode = pad.keyMode;
         r.kmap.fill (-1);
-        for (auto& kv : pad.kmap) if (kv.first >= 0 && kv.first < 32) r.kmap[(size_t) kv.first] = kv.second;
+        for (auto& kv : pad.kmap) if (kv.first >= 0 && kv.first < 128) r.kmap[(size_t) kv.first] = kv.second;
         if (! r.has) continue;
 
         // main slot (trim preview replaces it while trimming this pad)

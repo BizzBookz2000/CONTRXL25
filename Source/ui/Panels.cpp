@@ -32,8 +32,17 @@ TopBar::TopBar (Controller& c, Dialogs& d) : Panel (c, d)
     bRedo.onClick = [this] { ctl.redo(); };
     bQwerty.onClick = [this] { ctl.ui.qwerty = ! ctl.ui.qwerty; ctl.status (ctl.ui.qwerty ? "QWERTY KEYS ON" : "QWERTY KEYS OFF"); };
     bPanic.onClick = [this] { Command cmd; cmd.type = Command::Panic; ctl.engine.push (cmd); ctl.status ("ALL SOUND STOPPED"); };
-    kbBox.addItem ("25 keys", 25); kbBox.addItem ("32 keys", 32); noFocus (kbBox);
-    kbBox.onChange = [this] { if (kbBox.getSelectedId() != ctl.P.s.keys) ctl.setKeyboard (kbBox.getSelectedId()); };
+    noFocus (kbBox);
+    kbBox.onChange = [this]
+    {
+        const int id = kbBox.getSelectedId();
+        if (id == 999) { refresh(); dlg.askCustomKeys(); return; }   // "Your own keyboard..."
+        // 125 = Akai MPK mini IV, 225 = Akai MPK mini 3: 25 keys + their pads and knobs (+ the IV's transport)
+        const int profile = id == 125 ? 1 : id == 225 ? 2 : 0;
+        const int keys = profile != 0 ? 25 : id;
+        if (keys != ctl.P.s.keys) ctl.setKeyboard (keys);
+        if (profile != dlg.controllerProfile()) dlg.setControllerProfile (profile);
+    };
     caption (lKb, "Keyboard"); caption (lMaster, "Master"); caption (lSize, "Size");
     sizeBox.addItem ("Fit", 1);
     for (int p : { 60, 70, 80, 90, 100, 110, 125 }) sizeBox.addItem (juce::String (p) + "%", p);
@@ -50,13 +59,28 @@ TopBar::TopBar (Controller& c, Dialogs& d) : Panel (c, d)
     for (auto* b : { &bLearn, &bMidi }) b->getProperties().set ("noLearn", true);
     master.setComponentID ("master");
     master.setTooltip ("Master volume");
-    kbBox.setTooltip ("Keyboard size: 25 or 32 keys");
+    kbBox.setTooltip ("Keyboard size: 25 or 32 keys, or \"Your own keyboard...\" (25-88 keys). \"25 keys IV\" = Akai MPK mini IV, \"25 keys 3\" = Akai MPK mini 3: "
+                      "their pads play the pads and their knobs turn the pitch knobs (the IV's transport runs CONTRXL 25 too) - a quick setup links them");
     show (bSettings, bUndo, bRedo, bQwerty, bPanic, kbBox, master, lMaster, meter, sizeBox, lSize, bLearn, bMidi);
 }
 
 void TopBar::refresh()
 {
-    kbBox.setSelectedId (ctl.P.s.keys, juce::dontSendNotification);
+    {
+        const int keys = ctl.P.s.keys, prof = dlg.controllerProfile();
+        const int sel = prof == 1 && keys == 25 ? 125 : prof == 2 && keys == 25 ? 225 : keys;
+        if (kbBox.getNumItems() == 0 || kbKeys != keys)
+        {
+            kbKeys = keys;
+            kbBox.clear (juce::dontSendNotification);
+            kbBox.addItem ("25 keys", 25); kbBox.addItem ("32 keys", 32);
+            kbBox.addItem ("25 keys IV", 125); kbBox.addItem ("25 keys 3", 225);
+            if (keys != 25 && keys != 32) kbBox.addItem (juce::String (keys) + " keys", keys);
+            kbBox.addSeparator();
+            kbBox.addItem ("Your own keyboard...", 999);
+        }
+        kbBox.setSelectedId (sel, juce::dontSendNotification);
+    }
     sizeBox.setSelectedId (dlg.getUiScale() == 0 ? 1 : dlg.getUiScale(), juce::dontSendNotification);
     master.setValue (ctl.P.s.mvol, juce::dontSendNotification);
     bUndo.setEnabled (ctl.canUndo()); bRedo.setEnabled (ctl.canRedo());
@@ -99,7 +123,7 @@ void TopBar::resized()
     showTag = getWidth() >= 1640;
     r.removeFromLeft (150 + (showTag ? 230 : 0) + 64);
     const bool wide = getWidth() >= 1400;
-    layoutRow (r, { { &bSettings, 108 }, { &kbBox, 84 }, { &lSize, 34 }, { &sizeBox, 66 }, { nullptr, 0 }, { &lMaster, 50 }, { &master, wide ? 100 : 80 }, { &meter, wide ? 140 : 96 },
+    layoutRow (r, { { &bSettings, 108 }, { &kbBox, 104 }, { &lSize, 34 }, { &sizeBox, 66 }, { nullptr, 0 }, { &lMaster, 50 }, { &master, wide ? 100 : 80 }, { &meter, wide ? 140 : 76 },
                     { &bPanic, 56 }, { &bUndo, 52 }, { &bRedo, 52 }, { &bQwerty, 70 }, { &bLearn, 92 }, { &bMidi, 58 } }, 6);
 }
 
@@ -112,6 +136,8 @@ Faceplate::Faceplate (Controller& c, Dialogs& d) : Panel (c, d)
     bPlay.onClick = [this] { ctl.play(); };
     bRec.onClick = [this] { ctl.toggleRec(); };
     bStop.onClick = [this] { ctl.stop(); };
+    // from a MIDI controller these toggle (press Play again = stop, Stop again = play, Rec again = rec off)
+    bPlay.getProperties().set ("transport", "play"); bStop.getProperties().set ("transport", "stop"); bRec.getProperties().set ("transport", "rec");
     for (auto* b : { &bLoop, &bMetro, &bTempo, &bPlay, &bRec, &bStop }) b->setHw (true);
     bRec.setOnColour (C::rec);
     bPlay.setOnColour (C::ok);
@@ -171,9 +197,9 @@ Faceplate::Faceplate (Controller& c, Dialogs& d) : Panel (c, d)
         if (! p.buf) { ctl.status ("SELECT A PAD WITH A SAMPLE FIRST"); return; }
         dlg.saveFile ("Save pad as WAV", padLabel (ctl.P.s.sel) + "_" + io::safeName (p.name) + ".wav", "*.wav", [this] (juce::File f) { ctl.savePadWav (f); });
     };
-    for (int n : { 2, 4, 8, 16, 25, 32 })
+    for (int n : { 2, 4, 8, 16, 25, 32, 0 })   // 0 = "as many as the keys" (shown for other keyboard sizes)
     {
-        auto* b = eqBtns.add (new Btn (juce::String (n), "Cut the sample into " + juce::String (n) + " equal chops", [this, n] { ctl.equalChops (n); }));
+        auto* b = eqBtns.add (new Btn (juce::String (n), "Cut the sample into " + juce::String (n) + " equal chops", [this, n] { ctl.equalChops (n > 0 ? n : ctl.P.s.keys); }));
         addAndMakeVisible (b);
     }
     bTrans.onClick = [this] { ctl.transientChops(); };
@@ -203,6 +229,7 @@ Faceplate::Faceplate (Controller& c, Dialogs& d) : Panel (c, d)
         });
     };
     show (bLoad, bAddLay, bSample, bResample, bSaveWav, bTrans, bClearChops, bManual, bToPads, bToKeys, bExtract, bCopy, bPaste, bClear, bToLib);
+    show (smpMeter);
 }
 
 void Faceplate::stepRegion (int dir) { ctl.stepRegion (dir); }
@@ -285,7 +312,18 @@ void Faceplate::refresh()
     fadeIn.setVisible (trimming); fadeOut.setVisible (trimming); gain.setVisible (trimming);
     if (trimming) { fadeIn.set (ctl.trim.fi); fadeOut.set (ctl.trim.fo); gain.set (ctl.trim.g); }
     bManual.setOn (wave.manual);
-    for (int i = 0; i < eqBtns.size(); ++i) eqBtns[i]->setVisible (i < 5 || ctl.P.s.keys == 32);
+    {
+        static const int EQ[] = { 2, 4, 8, 16, 25, 32 };
+        const int keys = ctl.P.s.keys;
+        for (int i = 0; i < eqBtns.size(); ++i)
+        {
+            if (i < 6) { eqBtns[i]->setVisible (EQ[i] <= keys); continue; }
+            // "chop to" grows with your keyboard: 37, 49, 61... equal chops, one per key
+            eqBtns[i]->setVisible (keys != 25 && keys != 32);
+            eqBtns[i]->setButtonText (juce::String (keys));
+            eqBtns[i]->setTooltip ("Cut the sample into " + juce::String (keys) + " equal chops - one for every key");
+        }
+    }
     wave.refresh();
     resized();
     repaint (displayArea);
@@ -294,6 +332,7 @@ void Faceplate::refresh()
 void Faceplate::tick()
 {
     wave.tick();
+    smpMeter.tick();
     // PLAY: unlit when stopped, green while playing, red while playing + recording
     const bool playing = ctl.engine.playing.load();
     bPlay.setOnColour (ctl.ui.rec ? C::rec : C::ok);
@@ -372,6 +411,7 @@ void Faceplate::resized()
     r.removeFromTop (4);
     auto tools2 = r.removeFromBottom (26); r.removeFromBottom (4);
     auto tools1 = r.removeFromBottom (26); r.removeFromBottom (4);
+    smpMeter.setBounds (r.removeFromBottom (14)); r.removeFromBottom (4);
     if (fadeIn.isVisible())
     {
         auto tr2 = r.removeFromBottom (22); r.removeFromBottom (2);
@@ -461,6 +501,8 @@ Deck::Deck (Controller& c, Dialogs& d) : Panel (c, d)
     }
     bKeys.onClick = [this] { ctl.setMode (MODE_KEYS); };
     bChop.onClick = [this] { ctl.setMode (MODE_CHOP); };
+    bPadKeys.onClick = [this] { ctl.setKeysPlayPads (! ctl.P.s.keyPads); };
+    bPadsToKeys.onClick = [this] { ctl.padsToKeys(); };
     bKeys.setTooltip ("Keys mode for the selected pad: the sample is pitched across the keys");
     bChop.setTooltip ("Chop mode for the selected pad: each key plays one chop");
     bGate.onClick = [this] { ctl.toggle (ctl.P.s.gate, "GATE"); };
@@ -488,15 +530,17 @@ Deck::Deck (Controller& c, Dialogs& d) : Panel (c, d)
     lDocked.setJustificationType (juce::Justification::centred);
     lDocked.setText ("The keyboard is in its own window. QWERTY and MIDI keep working.", juce::dontSendNotification);
     show (bKeys, bChop, bGate, bVel, bChoke, bClrPads, bClrKeys, bHideKeys, rootBox, lRoot, lDocked, kb);
+    show (bPadKeys, bPadsToKeys);
 }
 
 void Deck::refresh()
 {
     for (int b = 0; b < 8; ++b) banks[b]->setOn (b == ctl.ui.bank);
     for (auto* p : pads) p->repaint();
-    bKeys.setOn (ctl.selPad().keyMode == MODE_KEYS); bChop.setOn (ctl.selPad().keyMode == MODE_CHOP);
-    bKeys.setButtonText (padLabel (ctl.P.s.sel) + " KEYS\nPitch across keys");
-    bChop.setButtonText (padLabel (ctl.P.s.sel) + " CHOP\nKeys play chops");
+    bKeys.setOn (! ctl.P.s.keyPads && ctl.selPad().keyMode == MODE_KEYS); bChop.setOn (! ctl.P.s.keyPads && ctl.selPad().keyMode == MODE_CHOP);
+    bPadKeys.setOn (ctl.P.s.keyPads);
+    bKeys.setButtonText (padLabel (ctl.P.s.sel) + " KEYS\nPitched");
+    bChop.setButtonText (padLabel (ctl.P.s.sel) + " CHOP\nChops on keys");
     bGate.setOn (ctl.P.s.gate); bVel.setOn (ctl.P.s.vel); bChoke.setOn (ctl.P.s.choke);
     rootBox.setSelectedId (ctl.P.s.root, juce::dontSendNotification);
     const bool popped = dlg.isKeyboardPopped();
@@ -520,11 +564,11 @@ void Deck::resized()
     auto right = r.removeFromRight (236);
     {
         auto rr = right;
-        layoutRow (rr.removeFromTop (44), { { &bKeys, 0 }, { &bChop, 0 } }, 6); rr.removeFromTop (6);
+        layoutRow (rr.removeFromTop (44), { { &bKeys, 0 }, { &bChop, 0 }, { &bPadKeys, 0 } }, 4); rr.removeFromTop (6);
         layoutRow (rr.removeFromTop (26), { { &bGate, 0 }, { &bVel, 0 }, { &bChoke, 0 } }, 6); rr.removeFromTop (6);
         layoutRow (rr.removeFromTop (26), { { &lRoot, 44 }, { &rootBox, 0 } }, 6); rr.removeFromTop (6);
         layoutRow (rr.removeFromTop (26), { { &bClrPads, 0 }, { &bClrKeys, 0 } }, 6); rr.removeFromTop (6);
-        bHideKeys.setBounds (rr.removeFromTop (26));
+        layoutRow (rr.removeFromTop (26), { { &bPadsToKeys, 0 }, { &bHideKeys, 0 } }, 6);
     }
     r.removeFromRight (12);
     auto bankRow = r.removeFromTop (28);
@@ -599,7 +643,7 @@ SoundPanel::SoundPanel (Controller& c, Dialogs& d) : Panel (c, d)
     thrDb.onChange = [this] (double v) { ctl.ui.smpThrDb = (float) v; };
     smpInfo.setFont (mono (11.0f)); smpInfo.setColour (juce::Label::textColourId, C::mute);
     smpInfo.setJustificationType (juce::Justification::topLeft);
-    show (sThr, sCount, thrDb, smpInfo);
+    show (sThr, sCount, thrDb, smpInfo, smpMeter);
 
     tKeep.onClick = [this] { ctl.ui.keepPitch = ! ctl.ui.keepPitch; ctl.sendChangeMessage(); };
     tMatch.onClick = [this] { ctl.matchBpm(); };
@@ -641,6 +685,7 @@ void SoundPanel::refresh()
 
 void SoundPanel::tick()
 {
+    if (smpMeter.isShowing()) smpMeter.tick();
     vu.setGr (ctl.engine.laGr.load());
     laGr.setText (juce::String (ctl.engine.laGr.load(), 1) + " dB", juce::dontSendNotification);
     const float lv = ctl.engine.captureLevel();
@@ -680,6 +725,7 @@ void SoundPanel::resized()
         auto a = place (cSmp, (int) (w * 0.75));
         layoutRow (a.removeFromTop (26), { { &sThr, 0 }, { &sCount, 0 } }, 4); a.removeFromTop (6);
         thrDb.setBounds (a.removeFromTop (22)); a.removeFromTop (6);
+        smpMeter.setBounds (a.removeFromTop (34)); a.removeFromTop (6);
         smpInfo.setBounds (a);
     }
     {
@@ -987,7 +1033,11 @@ SongPanel::SongPanel (Controller& c, Dialogs& d) : Panel (c, d)
     {
         auto d = currentCrate().isEmpty() ? ctl.library.getRoot() : ctl.library.getRoot().getChildFile (currentCrate());
         d.createDirectory();
+       #if CX_MOBILE
+        ctl.status ("OPEN THE FILES APP > ON MY IPAD > CONTRXL 25 > LIBRARY" + (currentCrate().isEmpty() ? juce::String() : " > " + currentCrate().toUpperCase().replace ("/", " > ")));
+       #else
         d.startAsProcess();
+       #endif
     };
     bCrate.onClick = [this]
     {
@@ -1058,7 +1108,7 @@ void SongPanel::moreMenu()
     const auto crate = currentCrate();
     juce::PopupMenu m;
     m.addItem (1, "Import audio files..." + (crate.isNotEmpty() ? " (into " + crate + ")" : juce::String()));
-    m.addItem (2, "Import a folder (sub-folders become sub-crates)..." + (crate.isNotEmpty() ? " (into " + crate + ")" : juce::String()));
+    m.addItem (2, juce::String (CX_MOBILE ? "Import several samples..." : "Import a folder (sub-folders become sub-crates)...") + (crate.isNotEmpty() ? " (into " + crate + ")" : juce::String()));
     m.addSeparator();
     m.addItem (3, "Rename crate...", crate.isNotEmpty());
     m.addItem (4, "Delete crate (its samples move up one level)", crate.isNotEmpty());
@@ -1067,13 +1117,25 @@ void SongPanel::moreMenu()
     m.addItem (6, "Back up the library (.zip)...");
     m.addItem (7, "Restore / import a library or song .zip...");
     m.addSeparator();
+   #if CX_MOBILE
+    m.addItem (8, "Library folder: Files app > On My iPad > CONTRXL 25 > Library");
+    m.addItem (9, "Use another folder as the library...", false);
+   #else
     m.addItem (8, "Library folder: " + ctl.library.getRoot().getFullPathName());
     m.addItem (9, "Use another folder as the library...");
+   #endif
     m.addItem (10, "Back to the default library folder", ctl.library.getRoot() != Library::defaultRoot());
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&bLibMore), [this, crate] (int r)
     {
         if (r == 1) dlg.openAudio (true, [this, crate] (juce::Array<juce::File> f) { ctl.libImport (f, crate); });
-        else if (r == 2) dlg.chooseFolder ("Import a folder of samples", [this, crate] (juce::File f) { ctl.libImport ({ f }, crate); });
+        else if (r == 2)
+        {
+           #if CX_MOBILE   // iPad: pick the files (select all in a folder)
+            dlg.openAudio (true, [this, crate] (juce::Array<juce::File> f) { ctl.libImport (f, crate); });
+           #else
+            dlg.chooseFolder ("Import a folder of samples", [this, crate] (juce::File f) { ctl.libImport ({ f }, crate); });
+           #endif
+        }
         else if (r == 3)
         {
             const auto last = Library::crateName (crate);
@@ -1108,7 +1170,14 @@ void SongPanel::moreMenu()
         }
         else if (r == 6) dlg.saveFile ("Back up the library", "CONTRXL25_library_" + juce::Time::getCurrentTime().formatted ("%Y-%m-%d") + ".zip", "*.zip", [this] (juce::File f) { ctl.libBackup (f); });
         else if (r == 7) dlg.openFile ("Restore a library backup (or take the samples out of a song)", "*.zip", [this] (juce::File f) { ctl.libRestore (f); });
-        else if (r == 8) ctl.library.getRoot().startAsProcess();
+        else if (r == 8)
+        {
+           #if CX_MOBILE
+            ctl.status ("OPEN THE FILES APP > ON MY IPAD > CONTRXL 25 > LIBRARY - COPY SAMPLES IN THERE, THEN PRESS REFRESH");
+           #else
+            ctl.library.getRoot().startAsProcess();
+           #endif
+        }
         else if (r == 9) dlg.chooseFolder ("Choose the folder to use as the library (its sub-folders become crates)", [this] (juce::File f)
         {
             ctl.ui.libCrate = {};

@@ -232,7 +232,7 @@ void WaveformView::mouseDrag (const juce::MouseEvent& e)
                 g.drawText ("CHOP " + juce::String (dragRegion + 1), 0, 0, 90, 26, juce::Justification::centred);
             }
             dc->startDragging ("chop:" + juce::String (dragRegion), this, juce::ScaledImage (img));
-            ctl.status ("DROP CHOP " + juce::String (dragRegion + 1) + " ON A PAD TO COPY IT THERE");
+            ctl.status ("DROP CHOP " + juce::String (dragRegion + 1) + " ON A PAD TO COPY IT THERE, OR ON A KEY TO PLAY IT FROM THAT KEY");
         }
         drag = D_NONE;
     }

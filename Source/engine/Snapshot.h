@@ -30,14 +30,14 @@ struct RPad
     std::vector<RSlot> layers;
     bool hasKmap = false;
     int keyMode = 0;
-    std::array<int, 32> kmap {};
+    std::array<int, 128> kmap {};
     // mixer
     int instRoot = 60;
     float pan = 0;
     bool solo = false;
     std::array<float, NSEND> send {};
     int numChops() const { return has ? (int) main.segs.size() : 0; }
-    int chopForKey (int k) const { return hasKmap ? (k >= 0 && k < 32 ? kmap[(size_t) k] : -1) : k; }
+    int chopForKey (int k) const { return hasKmap ? (k >= 0 && k < 128 ? kmap[(size_t) k] : -1) : k; }
 };
 
 struct Snapshot

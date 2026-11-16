@@ -2,6 +2,7 @@
 
 namespace cx::ui
 {
+std::unique_ptr<juce::MouseListener> makeLongPressMenus();   // touch: hold = right-click (below)
 // ------------------------------------------------------------------ audio host
 void AudioHost::audioDeviceAboutToStart (juce::AudioIODevice* d)
 {
@@ -29,7 +30,10 @@ void AudioHost::handleIncomingMidiMessage (juce::MidiInput* src, const juce::Mid
         if (noteFilter.isNotEmpty() && src != nullptr && src->getIdentifier() != noteFilter
             && (m.isNoteOnOrOff() || m.isPitchWheel() || m.isAftertouch() || m.isChannelPressure()))
         {
-            const bool linked = m.isNoteOnOrOff() && engine.noteMap[(size_t) (m.getNoteNumber() & 127)].load() != Engine::MAP_NONE;
+            const int nn = m.getNoteNumber() & 127, chn = juce::jlimit (0, 15, m.getChannel() - 1);
+            const bool linked = m.isNoteOnOrOff() && (engine.noteMap[(size_t) nn].load() != Engine::MAP_NONE
+                                                      || engine.noteMapCh[(size_t) chn][(size_t) nn].load() != Engine::MAP_NONE
+                                                      || engine.padChannel.load() == chn + 1);
             if (! engine.learnArmed.load() && ! linked) return;
         }
     }
@@ -86,6 +90,15 @@ public:
                 juce::ModalCallbackFunction::create ([this] (int r) { if (r == 1) { ctl.clearMidiLinks(); update(); } }));
         };
         bDevices.onClick = [this] { dlg.showAudioSettings(); };
+        // iPad: Bluetooth MIDI keyboards (MPK mini IV, etc.) are paired from inside the app
+        bBle.onClick = [this]
+        {
+            if (! juce::BluetoothMidiDevicePairingDialogue::isAvailable()) { ctl.status ("BLUETOOTH MIDI ISN'T AVAILABLE ON THIS DEVICE"); return; }
+            juce::BluetoothMidiDevicePairingDialogue::open();
+        };
+        if (CX_MOBILE) addAndMakeVisible (bBle);
+        bMpk.onClick = [this] { dlg.showMpkSetup(); };
+        addAndMakeVisible (bMpk);
         bLearn.getProperties().set ("noLearn", true);
         list.setModel (this);
         list.setRowHeight (24);
@@ -152,7 +165,10 @@ public:
         r.removeFromTop (12);
         lLinks.setBounds (r.removeFromTop (22));
         auto bottom = r.removeFromBottom (30);
-        layoutRow (bottom, { { &bRemove, 110 }, { &bClear, 90 }, { nullptr, 0 }, { &bDevices, 200 } }, 8);
+        if (CX_MOBILE)
+            layoutRow (bottom, { { &bRemove, 90 }, { &bClear, 80 }, { nullptr, 0 }, { &bBle, 150 }, { &bMpk, 130 }, { &bDevices, 170 } }, 8);
+        else
+            layoutRow (bottom, { { &bRemove, 100 }, { &bClear, 86 }, { nullptr, 0 }, { &bMpk, 190 }, { &bDevices, 190 } }, 8);
         r.removeFromBottom (8);
         list.setBounds (r);
         lEmpty.setBounds (r.reduced (10));
@@ -173,7 +189,9 @@ private:
         bFollow { "Follow keyboard octave buttons", "ON: when you press your MIDI keyboard's own octave buttons, CONTRXL 25 follows" },
         bTransport { "Built-in transport CCs", "ON: the usual transport CCs work without learning (94/115 play, 95/116 rec, 93/117 stop, 86/113 loop, 87/112 metro, 88/114 tap). "
                                                "Turn OFF if they clash with your controller, and learn your own buttons instead" },
-        bRemove { "Remove" }, bClear { "Clear all" }, bDevices { "Audio / MIDI devices...", "Switch MIDI inputs on and off, choose the audio device" };
+        bRemove { "Remove" }, bClear { "Clear all" },
+        bMpk { "MPK setup...", "Link an Akai MPK mini IV's or MPK mini 3's pads and knobs (and the IV's transport) in a few presses" }, bDevices { "Audio / MIDI devices...", "Switch MIDI inputs on and off, choose the audio device" },
+        bBle { "Bluetooth MIDI...", "Pair a Bluetooth MIDI keyboard or pad controller" };
     juce::String lastShown;
 
     void fillInputs()
@@ -211,7 +229,7 @@ private:
         const auto txt = "Last MIDI:  " + ctl.lastMidi;
         if (txt != lastShown) { lastShown = txt; lLast.setText (txt, juce::dontSendNotification); }
         lSrc.setText ("From:       " + (host.lastSource().isEmpty() ? juce::String ("-") : host.lastSource())
-                      + "      (first key = note " + juce::String ((ctl.P.s.keys == 32 ? 53 : 48) - ctl.engine.midiOffset.load()) + ")", juce::dontSendNotification);
+                      + "      (first key = note " + juce::String (ctl.P.keyBase() - ctl.engine.midiOffset.load()) + ")", juce::dontSendNotification);
         if (ctl.midiMap.size() != (size_t) sigs.size() || bLearn.getToggleState() != ctl.midiLearn) update();
         static int n = 0;
         if (++n % 16 == 0 && juce::MidiInput::getAvailableDevices().size() + 1 != filter.getNumItems() && ! filter.isPopupActive()) fillInputs();
@@ -249,9 +267,13 @@ MainComponent::MainComponent()
     o.applicationName = "CONTRXL25"; o.filenameSuffix = ".settings"; o.osxLibrarySubFolder = "Application Support";
     o.folderName = "CONTRXL25";
     props = std::make_unique<juce::PropertiesFile> (o);
-    lastDir = juce::File (props->getValue ("lastDir", juce::File::getSpecialLocation (juce::File::userMusicDirectory).getFullPathName()));
+   #if CX_MOBILE
+    longPress = makeLongPressMenus();
+    juce::Desktop::getInstance().addGlobalMouseListener (longPress.get());
+   #endif
+    lastDir = juce::File (props->getValue ("lastDir", (CX_MOBILE ? userFilesFolder() : juce::File::getSpecialLocation (juce::File::userMusicDirectory)).getFullPathName()));
     ctl.P.s.mvol = (float) props->getDoubleValue ("mvol", 0.85);
-    ctl.P.s.keys = props->getIntValue ("keys", 25) == 32 ? 32 : 25;
+    ctl.P.s.keys = validKeys (props->getIntValue ("keys", 25));
     ctl.ui.qwerty = props->getBoolValue ("qwerty", true);
     {
         const auto chosen = props->getValue ("libraryRoot");
@@ -326,6 +348,8 @@ MainComponent::MainComponent()
     ctl.ui.recAllArmed = props->getBoolValue ("recAllArmed", false);
     ctl.midiMapFromVar (juce::JSON::parse (props->getValue ("midiMap", "{}")));
     ctl.pushMidiMap();
+    profile = juce::jlimit (0, 2, props->getIntValue ("ctlProfile", props->getBoolValue ("mpkIV", false) ? 1 : 0));
+    applyMpkProfile();
     ctl.addChangeListener (this);
 
     setNoFocusRecursive (*this);
@@ -352,6 +376,7 @@ MainComponent::MainComponent()
 MainComponent::~MainComponent()
 {
     stopTimer();
+    if (longPress) juce::Desktop::getInstance().removeGlobalMouseListener (longPress.get());
     editorWins.clear();          // plug-in editors go before their plug-ins
     if (pluginListWin) { props->setValue ("win_plugins", pluginListWin->getWindowStateAsString()); pluginListWin.reset(); }
     ctl.plugins.known.removeChangeListener (this);
@@ -382,6 +407,27 @@ MainComponent::~MainComponent()
     devices.closeAudioDevice();
     ctl.releaseAllPlugins();     // plug-ins go while the plug-in formats still exist
     ctl.removeChangeListener (this);
+}
+
+void MainComponent::saveForBackground()
+{
+    props->setValue ("recentPlugins", ctl.recentPlugins.joinIntoString ("\n"));
+    saveDeviceState();
+    props->setValue ("mvol", ctl.P.s.mvol);
+    props->setValue ("keys", ctl.P.s.keys);
+    props->setValue ("lastDir", lastDir.getFullPathName());
+    saveMidiPrefs();
+    ctl.library.save();
+    props->setValue ("libraryRoot", ctl.library.getRoot().getFullPathName());
+    props->saveIfNeeded();
+    if (ctl.unsaved)
+    {
+        auto dir = userFilesFolder().getChildFile ("Songs");
+        dir.createDirectory();
+        juce::String err;
+        ctl.pullPluginStates();
+        io::saveSong (ctl.P, dir.getChildFile ("Autosave - " + io::safeName (ctl.P.name) + ".zip"), err);   // stays "unsaved"
+    }
 }
 
 void MainComponent::setNoFocusRecursive (juce::Component& c)
@@ -540,7 +586,7 @@ bool MainComponent::keyPressed (const juce::KeyPress& k)
         if (chopWin != nullptr && chopWin->isActiveWindow()) { closeChopWindow(); return true; }
         ctl.ui.manualLearn = 0; ctl.status ("READY"); return true;
     }
-    const bool kb32 = ctl.P.s.keys == 32 && ctl.ui.qwerty;
+    const bool kb32 = ctl.P.s.keys >= 32 && ctl.ui.qwerty;   // 32+ keys: [ and ] are note keys
     const auto ch = k.getTextCharacter();
     if (! kb32 && ch == '[') { ctl.setBank ((ctl.ui.bank + 7) % 8); return true; }
     if (! kb32 && ch == ']') { ctl.setBank ((ctl.ui.bank + 1) % 8); return true; }
@@ -563,14 +609,14 @@ bool MainComponent::keyStateChanged (bool)
     if (! ctl.ui.qwerty) { if (! qwertyDown.empty()) releaseQwerty(); return false; }
     const auto mods = juce::ModifierKeys::getCurrentModifiers();
     bool used = false;
-    for (int i = 0; i < ctl.P.s.keys; ++i)
+    for (int i = 0; i < juce::jmin (32, ctl.P.s.keys); ++i)   // the computer keyboard covers the first 32 keys
     {
         const int code = qwertyCode (i);
         const bool down = juce::KeyPress::isKeyCurrentlyDown (code) && ! mods.isCommandDown() && ! mods.isShiftDown() && ! mods.isAltDown();
         const bool was = qwertyDown.count (code) > 0;
         if (down && ! was)
         {
-            if (i >= 29 && ctl.P.s.keys != 32) continue;
+            if (i >= 32 || (i >= 29 && ctl.P.s.keys < 32)) continue;
             qwertyDown[code] = i;
             deck.kb.keys.light (i, 1, true);
             ctl.noteOn (i, 100, 1);
@@ -617,6 +663,21 @@ void MainComponent::openFile (const juce::String& title, const juce::String& wil
 
 void MainComponent::saveFile (const juce::String& title, const juce::String& name, const juce::String& wildcard, std::function<void (juce::File)> cb)
 {
+   #if CX_MOBILE
+    // iPad: apps can't write where a save dialog points, so files go into the app's own folder,
+    // which the Files app shows (On My iPad > CONTRXL 25): songs in Songs, everything else in Exports
+    juce::ignoreUnused (title);
+    const auto ext = wildcard.fromLastOccurrenceOf ("*", false, false);
+    const bool song = ext == ".zip" && ! name.startsWith ("CONTRXL25_library");
+    auto dir = userFilesFolder().getChildFile (song ? "Songs" : "Exports");
+    dir.createDirectory();
+    auto f = dir.getChildFile (name);
+    if (ext.isNotEmpty() && ! f.hasFileExtension (ext)) f = f.withFileExtension (ext);
+    if (! song && f.exists()) f = f.getNonexistentSibling (true);
+    cb (f);
+    ctl.status ("SAVED IN FILES > ON MY IPAD > CONTRXL 25 > " + dir.getFileName().toUpperCase() + " > " + f.getFileName().toUpperCase());
+    return;
+   #endif
     chooser = std::make_unique<juce::FileChooser> (title, lastDir.getChildFile (name), wildcard);
     chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
                           [this, cb, wildcard] (const juce::FileChooser& fc)
@@ -632,6 +693,15 @@ void MainComponent::saveFile (const juce::String& title, const juce::String& nam
 
 void MainComponent::chooseFolder (const juce::String& title, std::function<void (juce::File)> cb)
 {
+   #if CX_MOBILE
+    // iPad: exports go into Files > On My iPad > CONTRXL 25 > Exports
+    juce::ignoreUnused (title);
+    auto dir = userFilesFolder().getChildFile ("Exports");
+    dir.createDirectory();
+    cb (dir);
+    ctl.status ("SAVED IN FILES > ON MY IPAD > CONTRXL 25 > EXPORTS");
+    return;
+   #endif
     chooser = std::make_unique<juce::FileChooser> (title, lastDir);
     chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [this, cb] (const juce::FileChooser& fc)
     {
@@ -651,7 +721,7 @@ void MainComponent::showAudioSettings()
     o.dialogTitle = "Audio / MIDI settings";
     o.dialogBackgroundColour = C::plate;
     o.escapeKeyTriggersCloseButton = true;
-    o.useNativeTitleBar = true;
+    o.useNativeTitleBar = ! CX_MOBILE;
     o.resizable = true;
     o.launchAsync();
 }
@@ -672,6 +742,45 @@ void MainComponent::openFiles (const juce::Array<juce::File>& files)
     }
     if (! audio.isEmpty()) ctl.loadFiles (audio, ctl.P.s.sel);
 }
+
+// ------------------------------------------------------------------ touch: hold = right-click
+// Everything that opens a menu with a right-click (pads, plug-in slots, crates...) opens it when you hold a
+// finger on it for half a second on the iPad.
+class LongPressMenus : public juce::MouseListener, private juce::Timer
+{
+public:
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        stopTimer();
+        if (e.mods.isPopupMenu() || ! (e.source.isTouch() || e.source.isPen())) return;
+        if (juce::ModalComponentManager::getInstance()->getNumModalComponents() > 0) return;   // a menu / dialog is open
+        auto* c = e.eventComponent;
+        if (c == nullptr || dynamic_cast<juce::Slider*> (c) || dynamic_cast<juce::TextEditor*> (c) || dynamic_cast<juce::ScrollBar*> (c)) return;
+        target = c;
+        downPos = e.position; downTime = e.eventTime; src = std::make_unique<juce::MouseInputSource> (e.source);
+        startTimer (520);
+    }
+    void mouseDrag (const juce::MouseEvent& e) override { if (e.getDistanceFromDragStart() > 10) stopTimer(); }
+    void mouseUp (const juce::MouseEvent&) override { stopTimer(); }
+private:
+    juce::Component::SafePointer<juce::Component> target;
+    juce::Point<float> downPos; juce::Time downTime;
+    std::unique_ptr<juce::MouseInputSource> src;
+    void timerCallback() override
+    {
+        stopTimer();
+        auto* c = target.getComponent();
+        if (c == nullptr || ! c->isShowing() || src == nullptr) return;
+        auto* b = dynamic_cast<juce::Button*> (c);
+        if (b != nullptr) b->setState (juce::Button::buttonNormal);   // letting go must not also click it
+        const juce::MouseEvent right (*src, downPos, juce::ModifierKeys (juce::ModifierKeys::rightButtonModifier), 1.0f,
+                                      0.0f, 0.0f, 0.0f, 0.0f, c, c, juce::Time::getCurrentTime(), downPos, downTime, 1, false);
+        c->mouseDown (right);
+        if (b != nullptr && target != nullptr) b->setState (juce::Button::buttonNormal);
+    }
+};
+
+std::unique_ptr<juce::MouseListener> makeLongPressMenus() { return std::make_unique<LongPressMenus>(); }
 
 // ------------------------------------------------------------------ pop-out windows
 PopOutWindow::Holder::Holder (MainComponent& o) : owner (o)
@@ -694,7 +803,8 @@ PopOutWindow::PopOutWindow (const juce::String& title, MainComponent& owner, std
     : juce::DocumentWindow (title, C::plate, juce::DocumentWindow::closeButton | juce::DocumentWindow::maximiseButton | juce::DocumentWindow::minimiseButton),
       onClose (std::move (close))
 {
-    setUsingNativeTitleBar (true);
+    setUsingNativeTitleBar (! CX_MOBILE);   // iPad: no native title bar, so JUCE draws one with a close button
+            if (CX_MOBILE) setTitleBarHeight (40);
     holder = new Holder (owner);
     setContentOwned (holder, false);
     setResizable (true, false);
@@ -733,6 +843,16 @@ void MainComponent::placeWindow (PopOutWindow& w, const juce::String& key, int d
             w.setTopLeftPosition (top->getScreenX() + 40, top->getScreenY() + 60);
         else w.centreWithSize (defW, defH);
     }
+   #if CX_MOBILE
+    // iPad: keep every window on the screen (the title bar must stay reachable to move / close it)
+    if (auto* d = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+    {
+        const auto area = d->userArea.reduced (8);
+        auto b = w.getBounds();
+        b.setSize (juce::jmin (b.getWidth(), area.getWidth()), juce::jmin (b.getHeight(), area.getHeight()));
+        w.setBounds (b.constrainedWithin (area));
+    }
+   #endif
     w.setVisible (true);
     makeTitleBarDark (w);
     w.toFront (true);
@@ -933,6 +1053,7 @@ void MainComponent::toggleMidiLearn()
 void MainComponent::handleMapFire (const MidiTarget& t, bool isCC, int value)
 {
     const juce::String key = t.kind + ":" + t.id + ":" + juce::String (t.n);
+    if (value < 0 && t.kind != "btn") return;   // -1 = a note let go
     // buttons: a note fires on note-on; a CC fires once when it goes up (>= 64), like pressing a button
     auto pressed = [&]
     {
@@ -945,9 +1066,8 @@ void MainComponent::handleMapFire (const MidiTarget& t, bool isCC, int value)
     if (t.kind == "knob")
     {
         if (! isCC) return;
-        const int gi = ctl.ui.bank * 8 + juce::jlimit (0, 7, t.n);
-        ctl.setPitch (gi, std::round ((value - 63.5f) / 63.5f * PR), true);
-        ctl.status ("MIDI -> " + padLabel (gi) + " PITCH " + fmtSt (ctl.P.pads[(size_t) gi].pitch) + " ST");
+        ctl.turnPitchKnob (key, t.n, value, false);   // absolute or endless, found out by itself
+        ctl.status (ctl.statusText);
         return;
     }
     juce::Component* c = nullptr;
@@ -964,7 +1084,16 @@ void MainComponent::handleMapFire (const MidiTarget& t, bool isCC, int value)
     }
     if (t.kind == "btn")
         if (auto* b = dynamic_cast<juce::Button*> (c))
-            if (pressed() && b->isEnabled() && b->onClick) b->onClick();
+        {
+            const auto tr = b->getProperties()["transport"].toString();
+            if (tr.isNotEmpty()) { ctl.transportEdge (tr, key, isCC ? value >= 64 : value > 0); return; }
+        }
+    if (t.kind == "btn")
+        if (auto* b = dynamic_cast<juce::Button*> (c))
+            if (value >= 0 && pressed() && b->isEnabled())
+            {
+                if (b->getProperties()["transport"].toString().isEmpty() && b->onClick) b->onClick();
+            }
 }
 
 void MainComponent::saveMidiPrefs()
@@ -975,7 +1104,233 @@ void MainComponent::saveMidiPrefs()
     props->setValue ("defTransport", ctl.engine.defaultTransportCC.load());
     props->setValue ("midiOffset", ctl.engine.midiOffset.load());
     props->setValue ("noteFilter", host.getNoteFilter());
+    props->setValue ("ctlProfile", profile);
+    props->removeValue ("mpkIV");
+    if (profile != 0)
+    {
+        juce::StringArray pads, knobs;
+        for (auto& n : ctl.engine.padNotes) pads.add (juce::String (n.load()));
+        for (auto& k : ctl.engine.knobCC) knobs.add (juce::String (k.load()));
+        props->setValue (profKey ("PadCh"), ctl.engine.padChannel.load());
+        props->setValue (profKey ("Pads"), pads.joinIntoString (","));
+        props->setValue (profKey ("Knobs"), knobs.joinIntoString (","));
+        props->setValue (profKey ("KnobRel"), ctl.engine.knobRelative.load());
+    }
     props->saveIfNeeded();
+}
+
+// ------------------------------------------------------------------ "25 keys IV": Akai MPK mini IV profile
+void MainComponent::applyMpkProfile()
+{
+    auto& e = ctl.engine;
+    if (profile == 0)
+    {
+        e.padChannel.store (0);
+        for (auto& n : e.padNotes) n.store (-1);
+        for (auto& k : e.knobCC) k.store (-1);
+        e.knobRelative.store (false);
+        return;
+    }
+    // defaults: pads on channel 10, notes 36-43 (bank A) and 44-51 (bank B), knobs CC 70-77 (the setup can change all of it)
+    // (the same as the factory programs of both the MPK mini IV and the MPK mini 3)
+    e.padChannel.store (juce::jlimit (1, 16, props->getIntValue (profKey ("PadCh"), 10)));
+    auto pads = juce::StringArray::fromTokens (props->getValue (profKey ("Pads")), ",", "");
+    auto knobs = juce::StringArray::fromTokens (props->getValue (profKey ("Knobs")), ",", "");
+    for (int k = 0; k < 16; ++k) e.padNotes[(size_t) k].store (pads.size() == 16 ? pads[k].getIntValue() : 36 + k);
+    for (int k = 0; k < 8; ++k) e.knobCC[(size_t) k].store (knobs.size() == 8 ? knobs[k].getIntValue() : 70 + k);
+    e.knobRelative.store (props->getBoolValue (profKey ("KnobRel"), false));
+}
+
+void MainComponent::setControllerProfile (int p)
+{
+    if (mpkWin != nullptr && p != profile) mpkWin.reset();   // a setup for the other controller is open
+    profile = juce::jlimit (0, 2, p);
+    applyMpkProfile();
+    saveMidiPrefs();
+    top.refresh();
+    if (profile == 1) ctl.status ("25 KEYS IV: AKAI MPK MINI IV - PADS, KNOBS AND TRANSPORT");
+    else if (profile == 2) ctl.status ("25 KEYS 3: AKAI MPK MINI 3 - PADS AND KNOBS");
+    if (profile != 0 && ! props->getBoolValue (profKey ("SetupDone"), false)) showMpkSetup();
+}
+
+void MainComponent::askCustomKeys()
+{
+    auto* w = new juce::AlertWindow ("Your own keyboard",
+                                     "How many keys does your keyboard have? (25 to 88)\n"
+                                     "The on-screen keys and the \"chop to\" buttons follow it. Use MIDI... > Set low key if its lowest key "
+                                     "doesn't play the first key on screen.", juce::MessageBoxIconType::QuestionIcon);
+    w->addTextEditor ("n", juce::String (ctl.P.s.keys == 25 || ctl.P.s.keys == 32 ? 49 : ctl.P.s.keys), "Keys:");
+    w->addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+    w->enterModalState (true, juce::ModalCallbackFunction::create ([this, w] (int r)
+    {
+        if (r == 1)
+        {
+            const int n = w->getTextEditorContents ("n").trim().getIntValue();
+            if (n < MIN_KEYS || n > MAX_KEYS) ctl.status ("ENTER A NUMBER OF KEYS FROM 25 TO 88");
+            else
+            {
+                if (profile != 0) setControllerProfile (0);
+                ctl.setKeyboard (n);
+                props->setValue ("keys", ctl.P.s.keys);
+            }
+        }
+        top.refresh();
+        grabKeyboardFocus();
+    }), true);
+}
+
+namespace
+{
+    // walks through the MPK mini IV's controls one by one: press / hit / turn each, or skip it
+    class MpkSetup : public juce::Component
+    {
+    public:
+        MpkSetup (Controller& c, int profile, std::function<void()> whenDone) : ctl (c), onDone (std::move (whenDone))
+        {
+            const bool iv = profile == 1;   // the MPK mini 3 has no transport buttons: just pads and knobs
+            auto act = [] (const char* id, const char* label) { return MidiTarget { "action", 0, id, label }; };
+            if (iv)
+            {
+                steps.push_back ({ "Stop / Play", "Press STOP/PLAY on the MPK", act ("playstop", "MPK Stop/Play") });
+                steps.push_back ({ "Record", "Press RECORD (the circle button)", act ("rec", "MPK Record") });
+                steps.push_back ({ "Overdub", "Press OVERDUB (the + button)", act ("rec", "MPK Overdub") });
+                steps.push_back ({ "Loop", "Press LOOP", act ("loop", "MPK Loop") });
+                steps.push_back ({ "Undo", "Press UNDO", act ("undo", "MPK Undo") });
+            }
+            for (int k = 0; k < 8; ++k) steps.push_back ({ "Pad " + juce::String (k + 1), "Hit PAD " + juce::String (k + 1) + " (Bank A)", MidiTarget { "padnote", k, {}, {} } });
+            for (int k = 0; k < 8; ++k) steps.push_back ({ "Knob " + juce::String (k + 1), "Turn KNOB " + juce::String (k + 1), MidiTarget { "knobcc", k, {}, {} } });
+            done.assign (steps.size(), 0);
+
+            title.setText (iv ? "Akai MPK mini IV - quick setup" : "Akai MPK mini 3 - quick setup", juce::dontSendNotification);
+            title.setFont (mono (15.0f, true)); title.setColour (juce::Label::textColourId, C::accent);
+            info.setText (iv ? "Press each control on the MPK mini IV when it is asked for (or Skip). The transport buttons send on the "
+                               "MPK's DAW port: keep every MPK mini IV input switched on in the MIDI window. If a step never reacts, "
+                               "switch the MPK to its DAW preset (PLUGIN/DAW button) and try again."
+                             : "Hit each pad and turn each knob on the MPK mini 3 when it is asked for (or Skip). Use Bank A, with CC and "
+                               "Prog Change off (pads must send notes). The joystick already bends pitch / sends mod. Its knobs turn all "
+                               "the way round: CONTRXL 25 notices by itself if they send steps instead of positions.",
+                          juce::dontSendNotification);
+            info.setFont (mono (11.0f)); info.setColour (juce::Label::textColourId, C::mute);
+            info.setJustificationType (juce::Justification::topLeft);
+            ask.setFont (mono (20.0f, true)); ask.setColour (juce::Label::textColourId, C::ok);
+            ask.setJustificationType (juce::Justification::centred);
+            list.setFont (mono (11.5f)); list.setColour (juce::Label::textColourId, C::fg);
+            list.setJustificationType (juce::Justification::topLeft);
+            bRel.setButtonText ("Knobs are endless (Rel mode)");
+            bRel.setTooltip ("Match the MPK's Global menu > KnobM setting. Abs (default) = OFF, Rel = ON");
+            bRel.setOn (ctl.engine.knobRelative.load());
+            bRel.onClick = [this] { ctl.engine.knobRelative.store (! ctl.engine.knobRelative.load()); bRel.setOn (ctl.engine.knobRelative.load()); };
+            bSkip.onClick = [this] { done[(size_t) cur] = 2; next(); };
+            bRestart.onClick = [this] { std::fill (done.begin(), done.end(), 0); cur = 0; arm(); };
+            bDone.onClick = [this] { finish(); };
+            bDone.setOnColour (C::ok); bDone.setOn (true);
+            for (juce::Component* comp : std::initializer_list<juce::Component*> { &title, &info, &ask, &list, &bRel, &bSkip, &bRestart, &bDone }) addAndMakeVisible (comp);
+            ctl.onLearned = [this] (const MidiTarget&, int, int, int)
+            {
+                juce::Component::SafePointer<MpkSetup> sp (this);
+                juce::MessageManager::callAsync ([sp] { if (sp) { sp->done[(size_t) sp->cur] = 1; sp->next(); } });
+            };
+            setSize (620, 560);
+            arm();
+        }
+        ~MpkSetup() override
+        {
+            ctl.onLearned = nullptr;
+            ctl.learnTarget.reset();
+            ctl.engine.learnArmed.store (false);
+        }
+        void paint (juce::Graphics& g) override { g.fillAll (C::plate); }
+        void resized() override
+        {
+            auto r = getLocalBounds().reduced (14);
+            title.setBounds (r.removeFromTop (24)); r.removeFromTop (4);
+            info.setBounds (r.removeFromTop (58)); r.removeFromTop (6);
+            ask.setBounds (r.removeFromTop (44)); r.removeFromTop (8);
+            auto b = r.removeFromBottom (30);
+            bDone.setBounds (b.removeFromRight (110)); b.removeFromRight (8);
+            bRestart.setBounds (b.removeFromRight (110)); b.removeFromRight (8);
+            bSkip.setBounds (b.removeFromRight (90));
+            bRel.setBounds (b.removeFromLeft (250));
+            r.removeFromBottom (8);
+            list.setBounds (r);
+        }
+    private:
+        struct Step { juce::String name, prompt; MidiTarget target; };
+        Controller& ctl;
+        std::function<void()> onDone;
+        std::vector<Step> steps;
+        std::vector<int> done;   // 0 waiting, 1 linked, 2 skipped
+        int cur = 0;
+        juce::Label title, info, ask, list;
+        Btn bRel, bSkip { "Skip" }, bRestart { "Start over" }, bDone { "Done" };
+
+        void arm()
+        {
+            if (cur >= (int) steps.size()) { ask.setText ("All set - press Done", juce::dontSendNotification); ctl.learnTarget.reset(); ctl.engine.learnArmed.store (false); show(); return; }
+            ask.setText (steps[(size_t) cur].prompt, juce::dontSendNotification);
+            ctl.learnTarget = steps[(size_t) cur].target;
+            ctl.engine.learnArmed.store (true);
+            ctl.status ("MPK SETUP: " + steps[(size_t) cur].prompt.toUpperCase());
+            show();
+        }
+        void next()
+        {
+            // bank B pads: if pads 1-8 are 8 notes in a row, bank B is the next 8 notes (it plays the next bank)
+            if (steps[(size_t) cur].target.kind == "padnote" && steps[(size_t) cur].target.n == 7)
+            {
+                bool row = true;
+                for (int k = 1; k < 8; ++k) row &= ctl.engine.padNotes[(size_t) k].load() == ctl.engine.padNotes[0].load() + k;
+                for (int k = 0; k < 8; ++k) ctl.engine.padNotes[(size_t) (8 + k)].store (row && ctl.engine.padNotes[0].load() + 8 + k < 128 ? ctl.engine.padNotes[0].load() + 8 + k : -1);
+            }
+            ++cur;
+            arm();
+        }
+        void show()
+        {
+            juce::String s;
+            for (size_t i = 0; i < steps.size(); ++i)
+            {
+                const auto mark = done[i] == 1 ? "[x] " : done[i] == 2 ? "[-] " : (int) i == cur ? ">>  " : "[ ] ";
+                s << (mark + steps[i].name).paddedRight (' ', 22);
+                if (i % 3 == 2) s << "\n";
+            }
+            list.setText (s, juce::dontSendNotification);
+        }
+        void finish()
+        {
+            ctl.onLearned = nullptr;
+            ctl.learnTarget.reset();
+            ctl.engine.learnArmed.store (false);
+            ctl.pushMidiMap();
+            if (ctl.onMidiMapChanged) ctl.onMidiMapChanged();
+            ctl.status ("MPK SET UP - PADS PLAY THIS BANK (BANK B = NEXT BANK), KNOBS TURN THE PITCH KNOBS");
+            if (onDone) onDone();
+        }
+    };
+}
+
+void MainComponent::showMpkSetup()
+{
+    if (mpkWin != nullptr) { mpkWin->toFront (true); return; }
+    if (profile == 0) { profile = 1; applyMpkProfile(); top.refresh(); }
+    auto close = [this]
+    {
+        juce::MessageManager::callAsync ([this]
+        {
+            if (! mpkWin) return;
+            props->setValue ("win_mpk", mpkWin->getWindowStateAsString());
+            props->setValue (profKey ("SetupDone"), true);
+            mpkWin.reset();
+            saveMidiPrefs();
+            grabKeyboardFocus();
+        });
+    };
+    mpkWin = std::make_unique<PopOutWindow> (profile == 2 ? "CONTRXL 25 - MPK mini 3 setup" : "CONTRXL 25 - MPK mini IV setup", *this, close);
+    auto panel = std::make_unique<MpkSetup> (ctl, profile, close);
+    mpkWin->holder->setContent (panel.get());
+    mpkWin->holder->owned = std::move (panel);
+    placeWindow (*mpkWin, "win_mpk", 640, 580);
 }
 
 void MainComponent::showMidiSettings()
@@ -1001,7 +1356,8 @@ namespace
             : juce::DocumentWindow (title, juce::Colours::black, juce::DocumentWindow::closeButton | juce::DocumentWindow::minimiseButton),
               close (std::move (onClose))
         {
-            setUsingNativeTitleBar (true);
+            setUsingNativeTitleBar (! CX_MOBILE);   // iPad: no native title bar, so JUCE draws one with a close button
+            if (CX_MOBILE) setTitleBarHeight (40);
             setContentOwned (ed, true);
             setResizable (ed->isResizable(), false);
         }
@@ -1017,10 +1373,15 @@ namespace
         PluginListHost (Controller& c, juce::PropertiesFile* props, const juce::File& crashFile) : ctl (c)
         {
             list = std::make_unique<juce::PluginListComponent> (c.plugins.formats, c.plugins.known, crashFile, props, true);
+           #if CX_MOBILE
+            list->setNumberOfThreadsForScanning (1);   // AUv3s open asynchronously: scan off the message thread
+           #endif
             addAndMakeVisible (*list);
-            info.setText ("VST3 plug-ins (instruments and effects). Scan finds plug-ins in the usual VST3 folder "
-                          "(C:\\Program Files\\Common Files\\VST3); add other folders when the scan asks. "
-                          "A plug-in that crashes the scan is skipped next time.", juce::dontSendNotification);
+            info.setText (CX_MOBILE ? "AUv3 plug-ins installed on this iPad (instruments and effects). Install them from the App Store, "
+                                      "open each one once, then press Scan."
+                                    : "VST3 plug-ins (instruments and effects). Scan finds plug-ins in the usual VST3 folder "
+                                      "(C:\\Program Files\\Common Files\\VST3); add other folders when the scan asks. "
+                                      "A plug-in that crashes the scan is skipped next time.", juce::dontSendNotification);
             info.setFont (mono (11.0f)); info.setColour (juce::Label::textColourId, C::mute);
             info.setJustificationType (juce::Justification::topLeft);
             addAndMakeVisible (info);
@@ -1042,7 +1403,7 @@ namespace
         Controller& ctl;
         std::unique_ptr<juce::PluginListComponent> list;
         juce::Label info;
-        Btn scan { "Scan for VST3 plug-ins", "Look for new or updated VST3 plug-ins" };
+        Btn scan { "Scan for " + pluginKind() + " plug-ins", "Look for new or updated " + pluginKind() + " plug-ins" };
     };
 
     // auto-sampler settings
@@ -1058,7 +1419,7 @@ namespace
             mode.addItem ("Pads: one note per pad (drum kits, one-shots)", 2);
             mode.setSelectedId (1, juce::dontSendNotification);
             for (int n = 0; n < 128; ++n) start.addItem (juce::String (N[n % 12]) + juce::String (n / 12 - 1) + "  (" + juce::String (n) + ")", n + 1);
-            for (int k = 1; k <= 64; ++k) count.addItem (juce::String (k) + (k == 1 ? " note" : " notes"), k);
+            for (int k = 1; k <= MAX_KEYS; ++k) count.addItem (juce::String (k) + (k == 1 ? " note" : " notes"), k);
             for (int k = 1; k <= 12; ++k) step.addItem ("every " + juce::String (k) + (k == 1 ? " semitone" : " semitones"), k);
             for (int i = 0; i < NPADS; ++i) target.addItem (padLabel (i) + " - " + (ctl.P.pads[(size_t) i].buf ? ctl.P.pads[(size_t) i].name : juce::String ("empty")), i + 1);
             for (auto* cb : { &mode, &start, &count, &step, &target }) { cb->setWantsKeyboardFocus (false); addAndMakeVisible (cb); }
@@ -1158,8 +1519,8 @@ void MainComponent::openPluginEditor (const SlotId& s)
 void MainComponent::showPluginList()
 {
     if (pluginListWin) { pluginListWin->toFront (true); return; }
-    if (! ctl.plugins.hasVst3()) { ctl.status ("THIS BUILD HAS NO VST3 SUPPORT"); return; }
-    pluginListWin = std::make_unique<PopOutWindow> ("CONTRXL 25 - Plug-ins (VST3)", *this, [this] { juce::MessageManager::callAsync ([this]
+    if (! ctl.plugins.hasVst3()) { ctl.status ("THIS BUILD HAS NO PLUG-IN SUPPORT"); return; }
+    pluginListWin = std::make_unique<PopOutWindow> ("CONTRXL 25 - Plug-ins (" + pluginKind() + ")", *this, [this] { juce::MessageManager::callAsync ([this]
     {
         if (pluginListWin) { props->setValue ("win_plugins", pluginListWin->getWindowStateAsString()); pluginListWin.reset(); grabKeyboardFocus(); }
     }); });
@@ -1172,13 +1533,13 @@ void MainComponent::showPluginList()
 
 void MainComponent::showAutoSampler (int pad)
 {
-    if (ctl.slotRef ({ SlotId::Inst, pad, 0 }).empty()) { ctl.status ("PUT A VST INSTRUMENT ON " + padLabel (pad) + " FIRST"); return; }
+    if (ctl.slotRef ({ SlotId::Inst, pad, 0 }).empty()) { ctl.status ("PUT A " + pluginKind() + " INSTRUMENT ON " + padLabel (pad) + " FIRST"); return; }
     juce::DialogWindow::LaunchOptions o;
     o.content.setOwned (new AutoSampleBox (ctl, pad));
     o.dialogTitle = "Auto-sample";
     o.dialogBackgroundColour = C::plate;
     o.escapeKeyTriggersCloseButton = true;
-    o.useNativeTitleBar = true;
+    o.useNativeTitleBar = ! CX_MOBILE;
     o.resizable = false;
     if (auto* dw = o.launchAsync()) makeTitleBarDark (*dw);
 }

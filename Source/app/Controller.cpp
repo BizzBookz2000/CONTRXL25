@@ -205,7 +205,8 @@ void Controller::clearKeys()
 {
     pushUndo();
     for (auto& p : P.pads) { p.hasKmap = true; p.kmap.clear(); }
-    changed(); status ("ALL CHOP-TO-KEY ASSIGNMENTS REMOVED - CTRL+Z UNDOES");
+    P.s.keyPad.fill (0); P.s.keyPads = false;
+    changed(); status ("ALL CHOP-TO-KEY AND PAD-TO-KEY ASSIGNMENTS REMOVED - CTRL+Z UNDOES");
 }
 
 void Controller::togglePadMute (int gi)
@@ -221,7 +222,12 @@ void Controller::movePad (int from, int to, bool copy)
     if (from == to || from < 0 || to < 0 || from >= NPADS || to >= NPADS) return;
     pushUndo();
     if (copy) { P.pads[(size_t) to] = P.pads[(size_t) from]; freshPluginCopies (P.pads[(size_t) to]); }
-    else std::swap (P.pads[(size_t) to], P.pads[(size_t) from]);
+    else
+    {
+        std::swap (P.pads[(size_t) to], P.pads[(size_t) from]);
+        for (auto& k : P.s.keyPad)   // keys keep playing the same sounds
+            k = k == from + 1 ? to + 1 : k == to + 1 ? from + 1 : k;
+    }
     P.s.sel = to; ui.bank = to >> 3;
     changed(); status ((copy ? "COPIED " : "MOVED ") + padLabel (from) + " TO " + padLabel (to));
 }
@@ -236,6 +242,12 @@ void Controller::setPadVol (float v)
 // ------------------------------------------------------------------ keys
 void Controller::noteOn (int idx, float vel, int tag)
 {
+    if (ui.padToKey >= 0)
+    {
+        const int gi = ui.padToKey; ui.padToKey = -1;
+        setPadOnKey (idx, gi);
+        return;
+    }
     if (ui.manualLearn == 2)
     {
         ui.manualLearn = 0;
@@ -259,9 +271,54 @@ void Controller::setOct (int o)
     changed(); status ("OCTAVE " + juce::String (P.s.oct >= 0 ? "+" : "") + juce::String (P.s.oct));
 }
 
+void Controller::padsToKeys()
+{
+    std::array<int, 128> map {};
+    int n = 0;
+    for (int gi = 0; gi < NPADS && n < P.s.keys; ++gi)
+        if (P.pads[(size_t) gi].hasSound()) map[(size_t) n++] = gi + 1;
+    if (n == 0) { status ("NO PADS WITH A SOUND YET - LOAD OR SAMPLE SOMETHING FIRST"); return; }
+    pushUndo();
+    P.s.keyPad = map; P.s.keyPads = true;
+    changed();
+    int total = 0; for (auto& pd : P.pads) if (pd.hasSound()) ++total;
+    status (juce::String (n) + " PAD" + (n > 1 ? "S" : "") + " ON KEYS 1-" + juce::String (n)
+            + (total > n ? " (" + juce::String (total - n) + " MORE THAN THE KEYBOARD HAS KEYS)" : juce::String())
+            + " - DRAG A PAD ONTO A KEY TO CHANGE ONE");
+}
+
+void Controller::setPadOnKey (int key, int gi)
+{
+    if (key < 0 || key >= P.s.keys) return;
+    pushUndo ("padkey");
+    if (! P.s.keyPads)
+    {
+        // switching to pads on keys with one dragged pad: start from an empty keyboard
+        P.s.keyPad.fill (0);
+        P.s.keyPads = true;
+    }
+    P.s.keyPad[(size_t) key] = gi >= 0 && gi < NPADS ? gi + 1 : 0;
+    changed();
+    const int nn = P.keyBase() + key;
+    const auto keyName = juce::MidiMessage::getMidiNoteName (nn, true, true, 3);
+    status (gi >= 0 ? "KEY " + keyName + " PLAYS " + padLabel (gi) + " - KEYS NOW PLAY PADS" : "KEY " + keyName + " CLEARED");
+}
+
+void Controller::setKeysPlayPads (bool on)
+{
+    if (on == P.s.keyPads) return;
+    bool any = false; for (auto v : P.s.keyPad) any |= v != 0;
+    if (on && ! any) { padsToKeys(); return; }
+    pushUndo ("mode");
+    P.s.keyPads = on;
+    changed();
+    status (on ? "KEYS PLAY PADS - EACH KEY PLAYS ITS PAD" : padLabel (P.s.sel) + " IS BACK ON THE KEYS");
+}
+
 void Controller::setMode (int m)
 {
     pushUndo ("mode");
+    P.s.keyPads = false;   // Keys / Chop are the selected pad's modes
     selPad().keyMode = m;
     P.s.mode = m;
     changed(); status (padLabel (P.s.sel) + (m == MODE_KEYS ? " KEYS MODE - THE SAMPLE IS PITCHED ACROSS THE KEYS" : " CHOP MODE - KEYS PLAY THE CHOPS"));
@@ -269,8 +326,8 @@ void Controller::setMode (int m)
 
 void Controller::setKeyboard (int n)
 {
-    P.s.keys = n == 32 ? 32 : 25;
-    changed(); status (P.s.keys == 32 ? "32 KEYS - 32 CHOPS AVAILABLE" : "25 KEYS");
+    P.s.keys = validKeys (n);
+    changed(); status (juce::String (P.s.keys) + " KEYS - UP TO " + juce::String (P.s.keys) + " CHOPS ON THE KEYS");
 }
 
 void Controller::setRoot (int r)
@@ -335,13 +392,29 @@ void Controller::addLayers (const juce::Array<juce::File>& files)
     changed(); status (juce::String (n) + " LAYER" + (n == 1 ? "" : "S") + " ADDED TO " + padLabel (P.s.sel) + " - THEY PLAY TOGETHER");
 }
 
+int Controller::padForNewSample() const
+{
+    for (int k = 0; k < NPADS; ++k)
+    {
+        const int gi = (P.s.sel + k) % NPADS;
+        if (! P.pads[(size_t) gi].hasSound()) return gi;
+    }
+    return -1;
+}
+
 void Controller::startSampling (bool fromInput)
 {
     if (isSampling()) { stopSampling (false); return; }
-    captureTarget = P.s.sel; captureFromInput = fromInput;
+    // never record over a sample: use the next empty pad (and show it)
+    const int target = padForNewSample();
+    if (target < 0) { status ("ALL 64 PADS ARE IN USE - CLEAR A PAD TO SAMPLE INTO IT"); return; }
+    const bool moved = target != P.s.sel;
+    // sampling: show the pad it records into. Resampling: keep the selected pad, you may be playing it
+    if (moved && fromInput) selectPad (target);
+    captureTarget = target; captureFromInput = fromInput;
     if (! engine.startCapture (fromInput, ui.smpThr, ui.smpThrDb, ui.smpCount, 60.0)) { status ("SAMPLER BUSY"); return; }
-    status (fromInput ? "SAMPLING INTO " + padLabel (P.s.sel) + " - PRESS STOP WHEN DONE"
-                      : "RESAMPLING INTO " + padLabel (P.s.sel) + " - PLAY SOMETHING");
+    status ((fromInput ? "SAMPLING INTO " : "RESAMPLING INTO ") + padLabel (target)
+            + (moved ? " (THE NEXT EMPTY PAD)" : "") + (fromInput ? " - PRESS STOP WHEN DONE" : " - PLAY SOMETHING"));
 }
 
 void Controller::stopSampling (bool cancel)
@@ -1085,6 +1158,7 @@ void Controller::play()
 {
     publish();
     engine.recordArmed.store (ui.rec);
+    lastPlayCmd = true; lastPlayCmdMs = juce::Time::getMillisecondCounterHiRes();
     Command c; c.type = Command::Play; c.f = (ui.rec && P.s.count) ? 4.0f : 0.0f;
     engine.push (c);
     status (c.f > 0 ? "COUNT-IN..." : ui.rec ? "RECORDING" : (P.s.song && ! P.chain.empty() ? "PLAYING SONG" : "PLAY"));
@@ -1094,9 +1168,94 @@ void Controller::stop()
 {
     ui.rec = false;
     engine.recordArmed.store (false);
+    lastPlayCmd = false; lastPlayCmdMs = juce::Time::getMillisecondCounterHiRes();
     Command c; c.type = Command::Stop;
     engine.push (c);
     status ("STOP");
+}
+
+bool Controller::playingNow() const
+{
+    // the audio thread takes a moment to start / stop: trust the command we just sent
+    if (juce::Time::getMillisecondCounterHiRes() - lastPlayCmdMs < 400.0) return lastPlayCmd;
+    return engine.playing.load();
+}
+
+void Controller::transportPress (const juce::String& which)
+{
+    const double now = juce::Time::getMillisecondCounterHiRes();
+    const juce::String kind = which == "rec" ? "rec" : "play";   // play, stop and playstop are one family
+    if (kind == lastTransport && now - lastTransportMs < 150.0) return;   // the same press sent twice
+    lastTransport = kind; lastTransportMs = now;
+    if (which == "rec") { toggleRec(); if (ui.rec) recOnMs = now; return; }
+    if (which == "recexit") { if (ui.rec && now - recOnMs > 400.0) toggleRec(); return; }
+    if (playingNow()) stop(); else play();
+}
+
+void Controller::transportEdge (const juce::String& which, const juce::String& control, bool down)
+{
+    auto& b = btnSense[control];
+    const double now = juce::Time::getMillisecondCounterHiRes();
+    if (down)
+    {
+        if (b.down && now - b.downMs < 400.0) return;   // a repeat of the same press
+        b.down = true; b.downMs = now;
+        transportPress (which);
+        return;
+    }
+    if (! b.down) return;
+    b.down = false;
+    if (b.momentary) return;
+    // released quickly = an ordinary push button: from now on only its presses count
+    if (now - b.downMs < 350.0) { b.momentary = true; return; }
+    // released much later, at the next push = a latching button: this "off" is the 2nd press
+    transportPress (which);
+}
+
+int Controller::relativeDelta (int v)
+{
+    if (v >= 1 && v <= 15) return v;            // two's complement: 1.. = right, 127.. = left
+    if (v >= 113 && v <= 127) return v - 128;
+    if (v >= 49 && v <= 79 && v != 64) return v - 64;   // "offset 64" style: 65 = right, 63 = left
+    return 0;
+}
+
+void Controller::turnPitchKnob (const juce::String& key, int k, int value, bool endless)
+{
+    k = juce::jlimit (0, 7, k);
+    const int gi = ui.bank * 8 + k;
+    auto& s = knobSense[key];
+    const int d = relativeDelta (value);
+    bool justFound = false;
+    if (! endless)
+    {
+        // an endless knob repeats the same value (1, 1, 1... or 127, 127...) - an absolute knob never does
+        if (! s.rel && value == s.last && d != 0)
+        {
+            s.rel = true; justFound = true; s.acc = (float) d * 0.5f;   // the first message was a step too
+            setPitch (gi, s.before, true);   // undo the jump the first message made
+            statusText = "KNOB " + juce::String (k + 1) + " IS ENDLESS (RELATIVE) - SWITCHED TO STEP MODE";
+        }
+        else if (s.rel && d == 0 && value != 64) s.rel = false;   // it sent a real position after all
+    }
+    s.last = value;
+    if (endless || s.rel)
+    {
+        if (endless && d == 0) return;
+        s.acc += (float) d * 0.5f;   // 2 clicks = 1 semitone
+        const float whole = std::trunc (s.acc);
+        if (whole != 0.0f)
+        {
+            s.acc -= whole;
+            setPitch (gi, P.pads[(size_t) gi].pitch + whole, true);
+        }
+    }
+    else
+    {
+        s.before = P.pads[(size_t) gi].pitch;
+        setPitch (gi, std::round ((value - 63.5f) / 63.5f * PR), true);
+    }
+    if (! justFound) statusText = "KNOB " + juce::String (k + 1) + " -> " + padLabel (gi) + " " + fmtSt (P.pads[(size_t) gi].pitch) + " st";
 }
 
 void Controller::toggleRec()
@@ -1211,13 +1370,23 @@ void Controller::applyRecHit (const EngineEvent& e)
     statusText = "REC -> TRACK" + juce::String (targets.size() > 1 ? "S " : " ") + where + " (" + padLabel (gi) + (chop >= 0 ? " chop " + juce::String (chop + 1) : juce::String()) + ")";
 }
 
+void Controller::doAction (const juce::String& id)
+{
+    if (id == "playstop" || id == "play" || id == "stop" || id == "rec") transportPress (id);
+    else if (id == "loop") toggle (P.s.loop, "LOOP");
+    else if (id == "metro") toggle (P.s.metro, "METRONOME");
+    else if (id == "tap") tapTempo();
+    else if (id == "undo") undo();
+    else if (id == "redo") redo();
+}
+
 void Controller::transportAction (int which)
 {
     switch (which)
     {
-        case 1: play(); break;
-        case 2: stop(); break;
-        case 3: toggleRec(); break;
+        case 1: transportPress ("play"); break;
+        case 2: transportPress ("stop"); break;
+        case 3: transportPress ("rec"); break;
         case 4: toggle (P.s.loop, "LOOP"); break;
         case 5: toggle (P.s.metro, "METRONOME"); break;
         case 6: tapTempo(); break;
@@ -1244,20 +1413,19 @@ void Controller::handleEvent (const EngineEvent& e)
         }
         case EngineEvent::Transport:
             if (e.a == 100) { if (e.b >= 0 && e.b < NPADS) P.pads[(size_t) e.b].sel = e.c; }
-            else if (e.a == 1) { if (! engine.playing.load()) play(); }
-            else if (e.a == 2) stop();
-            else if (e.a == 3) toggleRec();
+            else if (e.a == 1) transportPress ("play");
+            else if (e.a == 2) transportPress ("stop");
+            else if (e.a == 3) transportPress ("rec");
+            else if (e.a == 4) transportPress ("recexit");
             break;
-        case EngineEvent::PitchKnob:
-        {
-            const int gi = ui.bank * 8 + e.a;
-            setPitch (gi, std::round ((e.b - 63.5f) / 63.5f * PR), true);
-            statusText = "CC -> " + padLabel (gi) + " " + fmtSt (P.pads[(size_t) gi].pitch) + " st";
-            break;
-        }
+        case EngineEvent::PitchKnob:    turnPitchKnob ("prof" + juce::String (e.a), e.a, e.b, false); break;
+        case EngineEvent::PitchKnobRel: turnPitchKnob ("prof" + juce::String (e.a), e.a, e.b, true); break;
         case EngineEvent::ModWheel: if (onMod) onMod (e.f); break;
         case EngineEvent::Bend: if (onBend) onBend (e.f); break;
-        case EngineEvent::KeyLight: if (onKeyLight) onKeyLight (e.a, e.b != 0); break;
+        case EngineEvent::KeyLight:
+            if (onKeyLight) onKeyLight (e.a, e.b != 0);
+            if (e.b != 0 && ui.padToKey >= 0) { const int gi = ui.padToKey; ui.padToKey = -1; setPadOnKey (e.a, gi); }   // a MIDI key picks the key too
+            break;
         case EngineEvent::OctFollow:
             P.s.oct = e.a;
             statusText = "KEYBOARD OCTAVE " + juce::String (e.b >= 0 ? "+" : "") + juce::String (e.b) + " - APP OCTAVE FOLLOWS";
@@ -1280,10 +1448,23 @@ void Controller::handleEvent (const EngineEvent& e)
         {
             if (! learnTarget) break;
             const bool isCC = e.a == 1, isPC = e.a == 2;
-            const auto& t = *learnTarget;
+            const auto t = *learnTarget;
+            // controller-profile steps (MPK mini IV setup): pad notes and knob CCs go to the profile, not the link list
+            if (t.kind == "padnote" || t.kind == "knobcc")
+            {
+                if (t.kind == "padnote" && (isCC || isPC)) { statusText = "THAT WAS NOT A PAD - HIT PAD " + juce::String (t.n + 1); break; }
+                if (t.kind == "knobcc" && ! isCC) { statusText = "TURN KNOB " + juce::String (t.n + 1) + " (IT SHOULD SEND A CC)"; break; }
+                learnTarget.reset();
+                engine.learnArmed.store (false);
+                if (t.kind == "padnote") { engine.padNotes[(size_t) t.n].store (e.b); engine.padChannel.store (e.ch + 1); }
+                else engine.knobCC[(size_t) t.n].store (e.b);
+                if (onLearned) onLearned (t, e.a, e.b, e.ch);
+                break;
+            }
             if ((t.kind == "knob" || t.kind == "slider") && ! isCC) { statusText = "A KNOB OR SLIDER NEEDS A CONTROL THAT SENDS A VALUE - TURN A KNOB OR MOVE A FADER"; break; }
             if (isPC && t.kind == "key") { statusText = "A KEY NEEDS A NOTE OR CC (PROGRAM CHANGES HAVE NO RELEASE)"; break; }
-            const juce::String sig = (isCC ? "c" : isPC ? "p" : "n") + juce::String (e.b);
+            // learned on this MIDI channel, so two keyboards (or a keyboard's keys and its buttons) can't collide
+            const juce::String sig = (isCC ? "c" : isPC ? "p" : "n") + juce::String (e.b) + "." + juce::String (e.ch + 1);
             // one MIDI message drives one control, but a control may have several links
             // (e.g. PLAY on two different keyboards): only this message's old link is replaced
             midiMap.erase (sig);
@@ -1293,18 +1474,33 @@ void Controller::handleEvent (const EngineEvent& e)
             pushMidiMap();
             statusText = t.label.toUpperCase() + " <- " + sigName (sig).toUpperCase() + " - LINKED. CLICK ANOTHER CONTROL OR TURN MIDI LEARN OFF";
             if (onMidiMapChanged) onMidiMapChanged();
+            if (onLearned) onLearned (t, e.a, e.b, e.ch);
             break;
         }
         case EngineEvent::MapFire:
         {
-            const juce::String sig = (e.a == 1 ? "c" : e.a == 2 ? "p" : "n") + juce::String (e.b);
-            auto it = midiMap.find (sig);
-            if (it != midiMap.end() && onMapFire) onMapFire (it->second, e.a == 1, e.c);
+            const juce::String base = (e.a == 1 ? "c" : e.a == 2 ? "p" : "n") + juce::String (e.b);
+            auto it = midiMap.find (base + "." + juce::String (e.ch + 1));
+            if (it == midiMap.end()) it = midiMap.find (base);
+            if (it == midiMap.end()) break;
+            const bool release = e.f > 0.5f;
+            const juce::String control = base + "." + juce::String (e.ch + 1);
+            if (it->second.kind == "action")
+            {
+                if (isTransportId (it->second.id)) { transportEdge (it->second.id, control, e.c > 0); break; }
+                // other built-in actions (loop, undo...): fire once per press
+                if (release) break;
+                const bool press = e.a == 1 ? ccPress (1000 + e.b, e.c) : e.c > 0;
+                if (press) doAction (it->second.id);
+                break;
+            }
+            if (release && it->second.kind != "btn") break;   // only buttons care about a note being let go
+            if (onMapFire) onMapFire (it->second, e.a == 1, release ? -1 : e.c);
             break;
         }
         case EngineEvent::PadSelect: selectPad (e.a); break;
         case EngineEvent::LowKey:
-            statusText = "LOW KEY SET: NOTE " + juce::String (e.a) + " IS NOW " + (P.s.keys == 32 ? "F3" : "C3");
+            statusText = "LOW KEY SET: NOTE " + juce::String (e.a) + " IS NOW " + juce::MidiMessage::getMidiNoteName (P.keyBase(), true, true, 3);
             P.s.oct = 0; engine.appOct.store (0);
             break;
         default: break;
@@ -1315,11 +1511,17 @@ void Controller::timerCallback()
 {
     EngineEvent e;
     int n = 0; bool recChanged = false;
-    while (engine.pop (e) && n++ < 512)
+    int padSel = -1; EngineEvent lastIn; bool haveIn = false;
+    while (engine.pop (e) && n++ < 4096)
     {
+        // a burst of pad hits / MIDI selects the last pad once (each selection rebuilds the screen)
+        if (e.type == EngineEvent::PadSelect) { padSel = e.a; continue; }
+        if (e.type == EngineEvent::MidiIn) { lastIn = e; haveIn = true; continue; }
         handleEvent (e);
         if (e.type == EngineEvent::RecHit || e.type == EngineEvent::PitchKnob || e.type == EngineEvent::OctFollow || e.type == EngineEvent::Transport) recChanged = true;
     }
+    if (haveIn) handleEvent (lastIn);
+    if (padSel >= 0) selectPad (padSel);
     if (recChanged) changed();
     if (engine.captureState() == Engine::CAP_STOPPED) finishCapture();
     engine.collectGarbage();
@@ -1406,6 +1608,7 @@ std::vector<int> Controller::activeTracks (const std::vector<int>& plan) const
 
 void Controller::exportSongWav (const juce::File& f)
 {
+    if (needPluginCopies ([this, f] { exportSongWav (f); })) return;
     const auto plan = buildPlan(); const auto ids = activeTracks (plan);
     if (ids.empty()) { exportStatus = "Nothing to export yet. Load a sample, switch on some steps, then try again."; sendChangeMessage(); return; }
     stop();
@@ -1426,6 +1629,7 @@ void Controller::exportSongWav (const juce::File& f)
 
 void Controller::exportStems (const juce::File& folder)
 {
+    if (needPluginCopies ([this, folder] { exportStems (folder); })) return;
     const auto plan = buildPlan(); const auto ids = activeTracks (plan);
     if (ids.empty()) { exportStatus = "Nothing to export yet. Load a sample, switch on some steps, then try again."; sendChangeMessage(); return; }
     stop();
@@ -1550,7 +1754,9 @@ juce::String Controller::sigName (const juce::String& sig)
         for (auto& x : juce::StringArray::fromTokens (sig, ",", "")) parts.add (sigName (x));
         return parts.joinIntoString (" + ");
     }
-    return (sig.startsWith ("c") ? "CC " : sig.startsWith ("p") ? "Prog " : "Note ") + sig.substring (1);
+    const auto body = sig.substring (1);
+    const auto ch = body.containsChar ('.') ? " ch" + body.fromFirstOccurrenceOf (".", false, false) : juce::String();
+    return (sig.startsWith ("c") ? "CC " : sig.startsWith ("p") ? "Prog " : "Note ") + body.upToFirstOccurrenceOf (".", false, false) + ch;
 }
 
 juce::String Controller::midiSigFor (const MidiTarget& t) const
@@ -1597,15 +1803,23 @@ void Controller::pushMidiMap()
     for (auto& m : engine.noteMap) m.store (Engine::MAP_NONE);
     for (auto& m : engine.ccMap) m.store (Engine::MAP_NONE);
     for (auto& m : engine.pcMap) m.store (Engine::MAP_NONE);
+    for (auto* tbl : { &engine.noteMapCh, &engine.ccMapCh, &engine.pcMapCh }) for (auto& row : *tbl) for (auto& m : row) m.store (Engine::MAP_NONE);
     for (auto& kv : midiMap)
     {
-        const int num = kv.first.substring (1).getIntValue();
-        if (num < 0 || num > 127) continue;
+        // "n60" = note 60 on any channel, "n60.10" = note 60 on channel 10
+        const auto body = kv.first.substring (1);
+        const int num = body.upToFirstOccurrenceOf (".", false, false).getIntValue();
+        const int ch = body.containsChar ('.') ? body.fromFirstOccurrenceOf (".", false, false).getIntValue() : 0;
+        if (num < 0 || num > 127 || ch < 0 || ch > 16) continue;
         const auto& t = kv.second;
         const int code = t.kind == "pad" ? Engine::MAP_PAD + juce::jlimit (0, 7, t.n)
-                       : t.kind == "key" ? Engine::MAP_KEY + juce::jlimit (0, 63, t.n) : Engine::MAP_UI;
-        if (kv.first.startsWith ("p")) { if (t.kind != "key") engine.pcMap[(size_t) num].store (code); }
-        else (kv.first.startsWith ("c") ? engine.ccMap : engine.noteMap)[(size_t) num].store (code);
+                       : t.kind == "key" ? Engine::MAP_KEY + juce::jlimit (0, 127, t.n) : Engine::MAP_UI;
+        const bool isPC = kv.first.startsWith ("p"), isCC = kv.first.startsWith ("c");
+        if (isPC && t.kind == "key") continue;
+        auto& any = isPC ? engine.pcMap : isCC ? engine.ccMap : engine.noteMap;
+        auto& per = isPC ? engine.pcMapCh : isCC ? engine.ccMapCh : engine.noteMapCh;
+        if (ch == 0) any[(size_t) num].store (code);
+        else per[(size_t) (ch - 1)][(size_t) num].store (code);
     }
 }
 
@@ -1902,6 +2116,7 @@ void Controller::libRestore (const juce::File& zipFile)
 
 void Controller::bounceSong (bool toLibrary)
 {
+    if (needPluginCopies ([this, toLibrary] { bounceSong (toLibrary); })) return;
     const auto plan = buildPlan(); const auto ids = activeTracks (plan);
     if (ids.empty()) { status ("NOTHING TO BOUNCE - SWITCH ON SOME STEPS FIRST"); return; }
     stop();
@@ -1991,6 +2206,26 @@ void Controller::syncPlugins()
         }
         if (node == nullptr)
         {
+            if (plugins.needsAsyncXml (slot.xml))
+            {
+                // AUv3 (iPad): open it in the background, then sync again
+                if (openingIids.insert (slot.iid).second)
+                {
+                    const int iid = slot.iid; const bool isInst = slot.instrument; const auto state = slot.state; const auto name = slot.name;
+                    statusText = "OPENING " + name.toUpperCase() + "...";
+                    plugins.createAsyncXml (slot.xml, engine.getSampleRate(), 512,
+                        [this, iid, isInst, state, name] (std::unique_ptr<juce::AudioPluginInstance> inst, const juce::String& err)
+                        {
+                            openingIids.erase (iid);
+                            if (inst == nullptr) { failedIids.insert (iid); status ("PLUG-IN NOT FOUND: " + name.toUpperCase() + " (" + err + ")"); changed(); return; }
+                            auto nn = std::make_unique<PluginNode> (std::move (inst), iid, isInst);
+                            nn->setState (state);
+                            freshNodes[iid] = engine.addOwned (std::move (nn));
+                            changed();
+                        });
+                }
+                continue;
+            }
             juce::String err;
             auto inst = plugins.createFromXml (slot.xml, engine.getSampleRate(), 512, err);
             if (inst == nullptr) { failedIids.insert (slot.iid); statusText = "PLUG-IN NOT FOUND: " + slot.name.toUpperCase() + " (" + err + ")"; continue; }
@@ -2004,7 +2239,7 @@ void Controller::syncPlugins()
     }
     freshNodes.clear();
     for (auto* n : engine.ownedNodes())
-        if (used.count (n) == 0)
+        if (used.count (n) == 0 && openingIids.count (n->iid) == 0)
         {
             if (onPluginClosing) onPluginClosing (n);
             engine.retire (n);
@@ -2014,9 +2249,25 @@ void Controller::syncPlugins()
 bool Controller::setPlugin (const SlotId& s, const juce::PluginDescription& d)
 {
     status ("LOADING " + d.name.toUpperCase() + "...");
+    if (plugins.needsAsync (d))
+    {
+        // AUv3 (iPad): opens in the background; its editor opens when it is ready
+        plugins.createAsync (d, engine.getSampleRate(), 512, [this, s, d] (std::unique_ptr<juce::AudioPluginInstance> inst, const juce::String& err)
+        {
+            installPlugin (s, d, std::move (inst), err);
+            if (! slotRef (s).empty() && onOpenEditor) onOpenEditor (s);
+        });
+        return false;
+    }
     juce::String err;
     auto inst = plugins.create (d, engine.getSampleRate(), 512, err);
-    if (inst == nullptr) { status ("COULD NOT LOAD " + d.name.toUpperCase() + ": " + err); return false; }
+    installPlugin (s, d, std::move (inst), err);
+    return ! slotRef (s).empty() && slotRef (s).name == d.name;
+}
+
+void Controller::installPlugin (const SlotId& s, const juce::PluginDescription& d, std::unique_ptr<juce::AudioPluginInstance> inst, const juce::String& err)
+{
+    if (inst == nullptr) { status ("COULD NOT LOAD " + d.name.toUpperCase() + ": " + err); return; }
     const int iid = newPluginIid();
     auto* node = engine.addOwned (std::make_unique<PluginNode> (std::move (inst), iid, d.isInstrument));
     freshNodes[iid] = node;
@@ -2031,13 +2282,12 @@ bool Controller::setPlugin (const SlotId& s, const juce::PluginDescription& d)
     while (recentPlugins.size() > 12) recentPlugins.remove (recentPlugins.size() - 1);
     changed();
     status (d.name.toUpperCase() + " ON " + s.label().toUpperCase());
-    return true;
 }
 
 bool Controller::setPluginFromFile (const SlotId& s, const juce::String& path)
 {
     auto* fmt = plugins.formats.getNumFormats() > 0 ? plugins.formats.getFormat (0) : nullptr;
-    if (fmt == nullptr) { status ("THIS BUILD HAS NO VST3 SUPPORT"); return false; }
+    if (fmt == nullptr) { status ("THIS BUILD CAN'T OPEN PLUG-IN FILES - USE THE PLUG-IN LIST"); return false; }
     status ("READING " + juce::File (path).getFileName().toUpperCase() + "...");
     juce::OwnedArray<juce::PluginDescription> found;
     fmt->findAllTypesForFile (found, path);
@@ -2100,6 +2350,35 @@ void Controller::freshPluginCopies (Pad& p)
     for (auto& v : p.vfx) fresh (v);
 }
 
+bool Controller::needPluginCopies (std::function<void()> again, int onlyPadInstrument)
+{
+    // an offline render needs its own copy of every plug-in. VST3s are copied on the spot; AUv3s (iPad)
+    // open asynchronously, so open them first and run the render again when all are there.
+    if (sparesWanted > 0) { status ("GETTING THE PLUG-INS READY..."); return true; }
+    std::vector<std::pair<int, juce::String>> want;
+    for (auto& s : SlotId::all())
+    {
+        if (onlyPadInstrument >= 0 && ! (s.kind == SlotId::Inst && s.a == onlyPadInstrument)) continue;
+        if (engine.pluginAt (s) == nullptr) continue;
+        const auto& slot = slotRef (s);
+        if (spareInst.count (slot.iid) || ! plugins.needsAsyncXml (slot.xml)) continue;
+        want.push_back ({ slot.iid, slot.xml });
+    }
+    if (want.empty()) return false;
+    sparesWanted = (int) want.size();
+    status ("GETTING " + juce::String (sparesWanted) + " PLUG-IN" + (sparesWanted > 1 ? "S" : "") + " READY FOR THE RENDER...");
+    for (auto& w : want)
+    {
+        const int iid = w.first;
+        plugins.createAsyncXml (w.second, 48000, 1024, [this, iid, again] (std::unique_ptr<juce::AudioPluginInstance> inst, const juce::String&)
+        {
+            if (inst != nullptr) spareInst[iid] = std::move (inst);
+            if (--sparesWanted == 0 && again) again();
+        });
+    }
+    return true;
+}
+
 PluginSetPtr Controller::clonePlugins (double sampleRate, int block)
 {
     auto set = std::make_shared<PluginSet>();
@@ -2109,7 +2388,10 @@ PluginSetPtr Controller::clonePlugins (double sampleRate, int block)
         if (live == nullptr) continue;
         const auto& slot = slotRef (s);
         juce::String err;
-        auto inst = plugins.createFromXml (slot.xml, sampleRate, block, err);
+        std::unique_ptr<juce::AudioPluginInstance> inst;
+        auto sp = spareInst.find (slot.iid);
+        if (sp != spareInst.end()) { inst = std::move (sp->second); spareInst.erase (sp); }   // opened ahead (AUv3)
+        else inst = plugins.createFromXml (slot.xml, sampleRate, block, err);
         if (inst == nullptr) continue;
         auto node = std::make_unique<PluginNode> (std::move (inst), slot.iid, slot.instrument);
         node->setState (live->getState());
@@ -2170,11 +2452,15 @@ void Controller::autoSample (const AutoSample& a)
     const SlotId sid { SlotId::Inst, a.pad, 0 };
     auto* live = engine.pluginAt (sid);
     const auto& slot = slotRef (sid);
-    if (live == nullptr || slot.empty()) { status ("PUT A VST INSTRUMENT ON THIS PAD FIRST"); return; }
+    if (live == nullptr || slot.empty()) { status ("PUT A " + pluginKind() + " INSTRUMENT ON THIS PAD FIRST"); return; }
     if ((! a.toPads && a.target == a.pad) || (a.toPads && a.pad >= a.target && a.pad < a.target + a.count))
     { status ("CHOOSE OTHER PADS FOR THE SAMPLES - THE INSTRUMENT LIVES ON " + padLabel (a.pad)); return; }
+    if (needPluginCopies ([this, a] { autoSample (a); }, a.pad)) return;
     juce::String err;
-    auto inst = plugins.createFromXml (slot.xml, 48000, 512, err);
+    std::unique_ptr<juce::AudioPluginInstance> inst;
+    auto sp = spareInst.find (slot.iid);
+    if (sp != spareInst.end()) { inst = std::move (sp->second); spareInst.erase (sp); }
+    else inst = plugins.createFromXml (slot.xml, 48000, 512, err);
     if (inst == nullptr) { status ("COULD NOT OPEN THE INSTRUMENT FOR SAMPLING: " + err); return; }
     auto node = std::make_shared<PluginNode> (std::move (inst), 0, true);
     node->setState (live->getState());
