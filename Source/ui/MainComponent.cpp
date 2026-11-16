@@ -1377,7 +1377,7 @@ namespace
            #if CX_MOBILE
             list->setNumberOfThreadsForScanning (1);   // AUv3s open asynchronously: scan off the message thread
            #else
-            chooser = std::make_unique<PluginScanPanel> (c, props);
+            { auto cp = std::make_unique<PluginScanPanel> (c, props); auto* raw = cp.get(); findChosen = [raw] { raw->findPlugins(); }; chooser = std::move (cp); }
            #endif
             installed.addAndMakeVisible (*list);
             installed.onResize = [this] { list->setBounds (installed.getLocalBounds()); };
@@ -1410,7 +1410,7 @@ namespace
                     if (r > 0 && r <= fmts.size()) list->scanFor (*fmts[r - 1]);
                 });
             };
-            pick.onClick = [this] { if (chooser == nullptr) return; tabs.setCurrentTabIndex (1); chooser->findPlugins(); };
+            pick.onClick = [this] { if (chooser == nullptr) return; tabs.setCurrentTabIndex (1); findChosen(); };
             addAndMakeVisible (scan);
             if (chooser != nullptr) addAndMakeVisible (pick);
             setSize (900, 640);
@@ -1435,7 +1435,8 @@ namespace
         };
         Controller& ctl;
         std::unique_ptr<juce::PluginListComponent> list;
-        std::unique_ptr<PluginScanPanel> chooser;
+        std::unique_ptr<juce::Component> chooser;      // the Choose & scan page (desktop only)
+        std::function<void()> findChosen;
         Page installed;
         juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
         juce::Label info;

@@ -65,9 +65,13 @@ ScanOutcome PluginManager::scanOne (juce::AudioPluginFormat& format, const juce:
                                     std::function<bool()> shouldStop)
 {
     ScanOutcome o;
+   #if ! CX_MOBILE   // the iPad can't start helper programs (and the iPad project doesn't build the helper code)
     if (PluginScanner::helperAvailable())
         o = PluginScanner::scanOne (format.getName(), id, found, timeoutMs, std::move (shouldStop));
     else
+   #else
+    juce::ignoreUnused (timeoutMs, shouldStop);
+   #endif
     {
         // no helper (should not happen in a normal build): scan inside the app as before
         format.findAllTypesForFile (found, id);

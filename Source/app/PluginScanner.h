@@ -28,7 +28,7 @@ public:
                                 juce::OwnedArray<juce::PluginDescription>& results, int timeoutMs,
                                 std::function<bool()> shouldStop = {});
 
-    static int defaultTimeoutMs;                 // 60 s: some plug-ins check their licence when they open
+    inline static int defaultTimeoutMs = 60000;  // 60 s: some plug-ins check their licence when they open
 };
 
 // Plugged into juce::KnownPluginList, so every scan (including JUCE's own scan dialog) runs in the

@@ -3,7 +3,6 @@
 
 namespace cx
 {
-int PluginScanner::defaultTimeoutMs = 60000;
 
 juce::File PluginScanner::helperExecutable()
 {

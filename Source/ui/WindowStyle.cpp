@@ -11,7 +11,7 @@
 #endif
 #include "WindowStyle.h"
 
-#if ! defined (__APPLE__)   // macOS version: WindowStyle_mac.mm
+#if ! JUCE_MAC   // macOS version: WindowStyle_mac.mm (the iPad uses this file)
 
 namespace cx::ui
 {
