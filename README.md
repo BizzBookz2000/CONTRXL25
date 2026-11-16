@@ -1,6 +1,6 @@
 # CONTRXL 25 — desktop edition (JUCE / C++)
 
-A native Windows (and Mac/Linux) rebuild of the CONTRXL 25 web instrument: 64 pads in 8 banks,
+A native Windows and macOS (and Linux) rebuild of the CONTRXL 25 web instrument: 64 pads in 8 banks,
 a 25/32-key keyboard, chops, a 16-pattern sequencer with song chain, per-pad effects, retro sampler
 modes, stem separation, time-stretch, sampling/resampling and DAW-aligned exports.
 
@@ -67,6 +67,62 @@ To try a newer JUCE release: `-DCONTRXL_JUCE_VERSION=8.0.x`.
 | Path too long errors | Move the folder to something short like `C:\dev\CONTRXL25`. |
 | Build worked but no sound | Click **Audio / MIDI** in the app and pick your output device. "Windows Audio (Exclusive Mode)" gives the lowest latency. |
 
+## 1b. Build it on your Mac (Intel or Apple silicon, macOS 10.15.4 or newer)
+
+### What to install (one time, all free)
+
+1. **Apple's Command Line Tools** — open Terminal and run `xcode-select --install`, click **Install**.
+   (Full Xcode from the App Store also works and adds a debugger.)
+2. That's it. `build_mac.sh` downloads CMake (if you don't have it) and JUCE the first time.
+
+### Option A — one step
+
+1. Unzip this folder somewhere simple, for example `~/Developer/CONTRXL25`.
+2. Double-click **`Build CONTRXL 25.command`** (first time: right-click it → **Open** → **Open**),
+   or in Terminal: `cd ~/Developer/CONTRXL25 && bash build_mac.sh`
+3. Wait. The first build takes about 5–15 minutes on an Intel MacBook.
+4. The app is installed in **Applications** (a copy stays in `dist/`). Open it from Launchpad or Applications.
+   Build from the Mac's own disk (e.g. `~/Developer/CONTRXL25`), not from a USB stick.
+
+### Option B — inside Xcode (to edit and debug the code)
+
+```sh
+cmake -S . -B build-xcode -G Xcode -DJUCE_DIR="$PWD/JUCE"
+open build-xcode/CONTRXL25.xcodeproj
+```
+Pick the **CONTRXL25** scheme and **My Mac**, then press **Cmd+R**.
+
+### Option C — command line
+
+```sh
+cmake -S . -B build-mac -DCMAKE_BUILD_TYPE=Release
+cmake --build build-mac --parallel "$(sysctl -n hw.ncpu)"
+open "build-mac/CONTRXL25_artefacts/Release/CONTRXL 25.app"
+```
+Universal app (Intel + Apple silicon): add `-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"`.
+
+### Mac notes
+
+* Shortcuts use **Cmd** where Windows uses Ctrl (Cmd+Z, Cmd+S, Cmd+O...). Drag-to-copy uses **Option**.
+* **Sample** asks for microphone access the first time (System Settings → Privacy & Security → Microphone).
+* Plug-ins: **Audio Units** and **VST3** (`/Library/Audio/Plug-Ins/...` and `~/Library/Audio/Plug-Ins/...`).
+* Library folder: `~/Library/Application Support/CONTRXL25/Library` (or any folder you choose).
+* Song files are the same on Windows, Mac and the web version. A song that uses a plug-in finds it again on the
+  other computer if the same plug-in (same maker / version) is installed there.
+* The app is signed only for your own Mac. To give it to someone else, they right-click → Open the first time
+  (or you sign and notarize it with an Apple Developer ID).
+
+| Message | Fix |
+|---|---|
+| `xcrun: error: invalid active developer path` | Run `xcode-select --install` and try again. |
+| "Build CONTRXL 25.command" can't be opened | Right-click it → Open, or run `bash build_mac.sh` in Terminal. |
+| `Permission denied` | Run it as `bash build_mac.sh` (zip files sometimes lose the "executable" flag). |
+| CMake download fails | Install CMake from https://cmake.org/download/ (the macOS `.dmg`), then run the script again. |
+| No sound | **Audio / MIDI** in the app → choose the output (e.g. MacBook Pro Speakers or your interface). |
+| Sample records silence | Allow CONTRXL 25 under System Settings → Privacy & Security → Microphone. |
+| An Audio Unit is missing | Mixer → **Plug-ins...** → **Scan all...** → *Scan for AudioUnit plug-ins*. |
+| A plug-in scan fails / keeps failing | Mixer → **Plug-ins...** → **Choose & scan** → tick only the plug-ins you want → **Scan ticked**. Failed ones are skipped; tick them + **Scan ticked** to retry (choose a longer time-out for slow, licence-checking plug-ins). |
+
 ---
 
 ## 2. First run
@@ -91,16 +147,16 @@ To try a newer JUCE release: `-DCONTRXL_JUCE_VERSION=8.0.x`.
 | `[` `]` | previous / next bank (25-key mode) |
 | `,` `.` | previous / next chop region |
 | `Shift`+`1`…`8` | hit pads 1–8 of the bank |
-| `Ctrl+Z`, `Ctrl+Shift+Z` / `Ctrl+Y` | undo / redo |
-| `Ctrl+C`, `Ctrl+V` | copy / paste pad (or selected steps with the Select tool) |
-| `Ctrl+S`, `Ctrl+O` | save / load song |
+| `Ctrl+Z`, `Ctrl+Shift+Z` / `Ctrl+Y` (Mac: `Cmd+Z`, `Cmd+Shift+Z`) | undo / redo |
+| `Ctrl+C`, `Ctrl+V` (Mac: `Cmd`) | copy / paste pad (or selected steps with the Select tool) |
+| `Ctrl+S`, `Ctrl+O` (Mac: `Cmd`) | save / load song |
 | `Delete` | clear selected steps |
 | `Esc` | close the chop window / cancel "pick a pad / key" / leave MIDI Learn |
 
 Mouse: double-click the sample window to load a sample; **Chop window** pops the sample out for chopping
-(Esc closes it); the sequencer and keyboard have **Pop out / Dock** buttons; drag a pad onto another to move it (hold `Ctrl` to copy); right-click a pad for its menu;
+(Esc closes it); the sequencer and keyboard have **Pop out / Dock** buttons; drag a pad onto another to move it (hold `Ctrl` to copy — `Option` on a Mac); right-click a pad for its menu;
 double-click an empty pad to load (Shift+double-click any pad); drag a chop region from the sample window onto a pad to copy it there;
-with the sequencer's Select tool, drag selected steps to move them (hold `Ctrl` to copy); mouse wheel on the waveform zooms (Shift+wheel scrolls);
+with the sequencer's Select tool, drag selected steps to move them (hold `Ctrl` to copy — `Option` on a Mac); mouse wheel on the waveform zooms (Shift+wheel scrolls);
 pitch knobs: drag (Shift = fine), wheel, double-click = 0.
 
 ### MIDI and MIDI Learn
@@ -133,9 +189,9 @@ learned from several keyboards (e.g. PLAY on both the A25 and the M32).
 
 ### The library
 
-The library is a normal folder: `%APPDATA%\CONTRXL25\Library`, or any folder you pick with
+The library is a normal folder: `%APPDATA%\CONTRXL25\Library` (Mac: `~/Library/Application Support/CONTRXL25/Library`), or any folder you pick with
 **More... > Use another folder as the library**. Every folder inside is a crate, and folders inside folders are
-sub-crates — e.g. `Soul Samples\Artist\Kicks`. Copy samples in with Explorer and they appear in the app within a few
+sub-crates — e.g. `Soul Samples\Artist\Kicks`. Copy samples in with Explorer (Finder) and they appear in the app within a few
 seconds (or press **Refresh**). Samples you add inside the app (**Pad > library**, **+ Its chops**, **Bounce > library**)
 are written into their crate folder when you press **Save** or close the app. Drag a sample from the list onto a pad,
 or drop files / folders from Explorer onto the library to copy them into the selected crate.
@@ -148,10 +204,17 @@ several tracks armed, each pad lands on its own track. Keys played in chop mode 
 its chop). Switch on **Rec all armed** to record every hit onto every armed track at once (layering). Each pattern can use a different pad on the same track.
 **L** locks a track so recording never touches it; **S** solos it. The mixer strips have **R** and **L** too.
 
-### VST3 plug-ins and the mixer
+### VST3 / Audio Unit plug-ins and the mixer
 
-1. Open the **Mixer** tab and click **Plug-ins...** → **Scan for VST3 plug-ins**. The usual folder
-   `C:\Program Files\Common Files\VST3` is scanned; add your own folders when it asks. The list is remembered.
+1. Open the **Mixer** tab and click **Plug-ins...** → **Scan all...**. The usual folder
+   `C:\Program Files\Common Files\VST3` is scanned (Mac: the VST3 folders, and Audio Units are found through macOS); add your own folders when it asks. The list is remembered.
+   **Scanning is safe:** each plug-in is opened in a small helper program (`CONTRXL25_PluginScanner`). A plug-in that
+   crashes or hangs (more than 60 s) only stops the helper: it is marked **Failed**, put on the skip list, and the scan
+   goes on with the next one.
+   **Choose & scan** (second tab, or the **Choose & scan...** button) lists every plug-in on the computer without
+   opening any of them. Tick the ones you want (**Tick new**, **Tick failed**, or click rows), then **Scan ticked**.
+   **Add a plug-in file...** scans one `.vst3` (Mac: also `.component`) that you pick by hand. **Skip ticked** /
+   **Un-skip ticked** decide which plug-ins are never scanned; a failed plug-in can be retried any time.
 2. **Instrument on a pad**: in the Mixer click **+ instrument** on a strip (or right-click a pad → *VST instrument...* →
    *Search instruments...*). Type part of the name, maker or type, then Enter (recently used plug-ins come first).
    You can also drag a `.vst3` from Explorer straight onto a pad or a slot. Its editor opens. Now the pad, the keyboard, your MIDI keyboard and the sequencer play it.
@@ -168,7 +231,10 @@ sends A / B → master → master VST inserts → LA-2A → limiter → master v
 Notes:
 * Only **VST3** plug-ins are supported (64-bit). Old VST2 `.dll` plug-ins need Steinberg's discontinued VST2 SDK, which
   can't be included; most makers ship a VST3 version.
-* Plug-ins run inside CONTRXL 25: a buggy plug-in can crash the app. Save your song before trying new plug-ins.
+* Scanning can't crash the app any more (see above), but once a plug-in is *loaded* it runs inside CONTRXL 25: a buggy
+  plug-in can still crash the app while you play it. Save your song before trying new plug-ins.
+* Keep `CONTRXL25_PluginScanner` next to the app: inside `CONTRXL 25.app` on a Mac (the build puts it there),
+  next to `CONTRXL 25.exe` on Windows. Without it, scans fall back to the old (unsafe) way.
 * Pad inserts are not latency-compensated against each other (the master plug-ins' latency is removed from exports).
 * Heavy synths on many pads use a lot of CPU — raise the audio buffer to 256–512 if you hear crackles.
 
@@ -180,6 +246,8 @@ Notes:
 CONTRXL25/
   CMakeLists.txt          build script (downloads JUCE automatically)
   build_windows.bat       one-click Windows build -> dist\CONTRXL 25.exe
+  build_mac.sh            one-step macOS build    -> dist/CONTRXL 25.app
+  Build CONTRXL 25.command  double-click in Finder to run build_mac.sh
   Assets/icon.png         app icon
   Source/
     Main.cpp              application + window
@@ -194,7 +262,8 @@ CONTRXL25/
     dsp/Stems.*           stem separation (vocals / bass / instruments / drums)
     io/SongIO.*           audio decoding, WAV writer, song .zip (web compatible), library, tempo map .mid
     app/Controller.*      every user action, undo/redo (40 steps), clipboard, export jobs, plug-ins, auto-sampler
-    app/PluginManager.*   VST3 scanning list and plug-in creation
+    app/PluginManager.*   plug-in scanning list and creation (VST3; + Audio Units on macOS)
+    app/Platform.h        Windows / macOS words (Ctrl/Cmd, Recycle Bin/Trash...) and the app-data folder
     ui/*                  look & feel, pads, knobs, wheels, keyboard, waveform, sequencer, panels
   Tests/EngineTest.cpp    headless test (cmake -DCONTRXL_BUILD_TESTS=ON, target EngineTest)
   PORTING_NOTES.md        how each part of the web pseudocode maps to the C++ code

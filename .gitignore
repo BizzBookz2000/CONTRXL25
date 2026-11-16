@@ -5,3 +5,6 @@ out/
 .vs/
 CMakeSettings.json
 *.user
+build-mac/
+tools/
+.DS_Store

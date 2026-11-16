@@ -1010,39 +1010,76 @@ namespace
         std::function<void()> close;
     };
 
-    // the plug-in list with a big "scan" button on top
+    // plug-in window: "Installed" (JUCE's list) + "Choose & scan" (pick plug-ins one by one).
+    // All scanning runs in the helper process, so a broken plug-in can't crash the app.
     class PluginListHost : public juce::Component
     {
     public:
         PluginListHost (Controller& c, juce::PropertiesFile* props, const juce::File& crashFile) : ctl (c)
         {
             list = std::make_unique<juce::PluginListComponent> (c.plugins.formats, c.plugins.known, crashFile, props, true);
-            addAndMakeVisible (*list);
-            info.setText ("VST3 plug-ins (instruments and effects). Scan finds plug-ins in the usual VST3 folder "
-                          "(C:\\Program Files\\Common Files\\VST3); add other folders when the scan asks. "
-                          "A plug-in that crashes the scan is skipped next time.", juce::dontSendNotification);
+            chooser = std::make_unique<PluginScanPanel> (c, props);
+            installed.addAndMakeVisible (*list);
+            installed.onResize = [this] { list->setBounds (installed.getLocalBounds()); };
+            tabs.addTab ("Installed", C::plate, &installed, false);
+            tabs.addTab ("Choose & scan", C::plate, chooser.get(), false);
+            tabs.setTabBarDepth (30);
+            tabs.setOutline (0);
+            addAndMakeVisible (tabs);
+            info.setText (CX_PLUGIN_KINDS " plug-ins (instruments and effects). Plug-ins are opened in a separate helper while "
+                          "scanning: one that crashes or hangs is marked Failed and skipped, the scan goes on. "
+                         #if JUCE_MAC
+                          "Audio Units are found through macOS itself. "
+                         #endif
+                          "If a scan keeps failing, use Choose & scan to pick plug-ins one by one.", juce::dontSendNotification);
             info.setFont (mono (11.0f)); info.setColour (juce::Label::textColourId, C::mute);
             info.setJustificationType (juce::Justification::topLeft);
             addAndMakeVisible (info);
-            scan.onClick = [this] { if (auto* f = ctl.plugins.formats.getFormat (0)) list->scanFor (*f); };
+            scan.onClick = [this]
+            {
+                tabs.setCurrentTabIndex (0);
+                const auto fmts = ctl.plugins.allFormats();
+                if (fmts.size() == 1) { list->scanFor (*fmts[0]); return; }
+                // several formats (macOS: VST3 + Audio Units): pick which to scan
+                juce::PopupMenu m;
+                for (int i = 0; i < fmts.size(); ++i) m.addItem (i + 1, "Scan for " + fmts[i]->getName() + " plug-ins");
+                m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&scan), [this, fmts] (int r)
+                {
+                    if (r > 0 && r <= fmts.size()) list->scanFor (*fmts[r - 1]);
+                });
+            };
+            pick.onClick = [this] { tabs.setCurrentTabIndex (1); chooser->findPlugins(); };
             addAndMakeVisible (scan);
-            setSize (760, 560);
+            addAndMakeVisible (pick);
+            setSize (900, 640);
         }
         void paint (juce::Graphics& g) override { g.fillAll (C::plate); }
         void resized() override
         {
             auto r = getLocalBounds().reduced (10);
             auto top = r.removeFromTop (40);
-            scan.setBounds (top.removeFromRight (180).reduced (0, 4));
+            scan.setBounds (top.removeFromRight (150).reduced (0, 4));
+            top.removeFromRight (6);
+            pick.setBounds (top.removeFromRight (150).reduced (0, 4));
+            top.removeFromRight (8);
             info.setBounds (top);
             r.removeFromTop (6);
-            list->setBounds (r);
+            tabs.setBounds (r);
         }
     private:
+        struct Page : public juce::Component
+        {
+            std::function<void()> onResize;
+            void resized() override { if (onResize) onResize(); }
+        };
         Controller& ctl;
         std::unique_ptr<juce::PluginListComponent> list;
+        std::unique_ptr<PluginScanPanel> chooser;
+        Page installed;
+        juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
         juce::Label info;
-        Btn scan { "Scan for VST3 plug-ins", "Look for new or updated VST3 plug-ins" };
+        Btn scan { "Scan all...", "Scan every new or updated " CX_PLUGIN_KINDS " plug-in (safely, one at a time)" },
+            pick { "Choose & scan...", "List the plug-ins and choose which ones to scan" };
     };
 
     // auto-sampler settings
@@ -1158,16 +1195,16 @@ void MainComponent::openPluginEditor (const SlotId& s)
 void MainComponent::showPluginList()
 {
     if (pluginListWin) { pluginListWin->toFront (true); return; }
-    if (! ctl.plugins.hasVst3()) { ctl.status ("THIS BUILD HAS NO VST3 SUPPORT"); return; }
-    pluginListWin = std::make_unique<PopOutWindow> ("CONTRXL 25 - Plug-ins (VST3)", *this, [this] { juce::MessageManager::callAsync ([this]
+    if (! ctl.plugins.hasVst3()) { ctl.status ("THIS BUILD HAS NO PLUG-IN SUPPORT"); return; }
+    pluginListWin = std::make_unique<PopOutWindow> ("CONTRXL 25 - Plug-ins (" CX_PLUGIN_KINDS ")", *this, [this] { juce::MessageManager::callAsync ([this]
     {
         if (pluginListWin) { props->setValue ("win_plugins", pluginListWin->getWindowStateAsString()); pluginListWin.reset(); grabKeyboardFocus(); }
     }); });
-    auto crash = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("CONTRXL25").getChildFile ("plugin_scan_crash.txt");
+    auto crash = appDataDir().getChildFile ("plugin_scan_crash.txt");
     auto host = std::make_unique<PluginListHost> (ctl, props.get(), crash);
     pluginListWin->holder->setContent (host.get());
     pluginListWin->holder->owned = std::move (host);
-    placeWindow (*pluginListWin, "win_plugins", 780, 600);
+    placeWindow (*pluginListWin, "win_plugins", 920, 680);
 }
 
 void MainComponent::showAutoSampler (int pad)

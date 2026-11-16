@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.76.1 (macOS fix)
+- **Fixed: on the Mac every plug-in failed to scan** ("no usable plug-in inside"). The scanner helper waited for a
+  macOS message loop that a helper program doesn't have, so it never opened the plug-in. VST3 and Audio Units are
+  now opened directly; Audio Unit v3 plug-ins get a proper macOS message loop.
+  After updating: Mixer > Plug-ins... > Choose & scan > **Tick failed** > **Scan ticked** to rescan the ones that
+  were wrongly marked as failed.
+- `build_mac.sh` now also installs the app into **Applications** (and opens it in Finder), and warns when the
+  project is on a USB / external drive (build from the Mac's own disk instead).
+
+## 0.76.0
+- **Plug-in scanning can no longer crash the app** (the macOS crash when scanning).
+  - Every plug-in is opened by a separate helper, `CONTRXL25_PluginScanner`, one plug-in at a time. If a plug-in
+    crashes, or doesn't answer within the time-out (60 s by default), only the helper stops: the plug-in is marked
+    *Failed*, added to the skip list, and the scan carries on. This also covers JUCE's own *Scan all* dialog and
+    plug-in files dropped on pads / slots.
+  - The helper is built with the app and copied inside `CONTRXL 25.app` (Mac) or next to the `.exe` (Windows;
+    `build_windows.bat` copies it to `dist`).
+- **Choose & scan** (new tab in Plug-ins...): lists every VST3 / Audio Unit on the computer without opening them;
+  tick the ones to scan (Tick new / Tick failed / Tick all / click a row), Scan ticked, Stop, Skip / Un-skip ticked,
+  a time-out choice (15 s - 5 min), and **Add a plug-in file...** to scan a single `.vst3` / `.component` by hand.
+- Dropping a plug-in that already failed shows "skipped - retry it in Choose & scan" instead of trying again.
+- `ScanTest` (with `-DCONTRXL_BUILD_TESTS=ON`) checks that crashing, hanging and empty plug-ins are skipped safely.
+
+## 0.75.1 (macOS)
+- **Builds and runs on macOS** (Intel and Apple silicon, macOS 10.13+ to run, 10.15.4+ to build) from the same code as Windows.
+  - `build_mac.sh` / `Build CONTRXL 25.command`: one-step build that fetches CMake and JUCE 8.0.12 if needed,
+    puts `CONTRXL 25.app` in `dist/` and signs it for this Mac.
+  - **Audio Unit** instruments and effects next to VST3 (scan both from Mixer > Plug-ins...; `.component` files can be
+    dropped on pads and slots like `.vst3`).
+  - Mac wording everywhere: Cmd instead of Ctrl, Option to copy when dragging, Trash, Finder.
+  - Library and plug-in scan data live in `~/Library/Application Support/CONTRXL25`.
+  - Dark native title bar on macOS; songs, samples and audio files can be dropped on the Dock icon / opened with the app.
+  - Builds warning-free with Clang (Xcode's compiler): explicit braces in the sequencer step drawing (no behaviour change).
+
 ## 0.75.0
 - Live recording with several armed tracks:
   - A hit now goes to the armed track that plays that pad (e.g. track 2 = A2), even if another armed track is

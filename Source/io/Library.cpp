@@ -17,7 +17,7 @@ static juce::String legalPath (const juce::String& path)
 
 juce::File Library::defaultRoot()
 {
-    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("CONTRXL25").getChildFile ("Library");
+    return appDataDir().getChildFile ("Library");
 }
 
 bool Library::isAudioFile (const juce::File& f)

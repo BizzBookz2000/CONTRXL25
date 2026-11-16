@@ -79,9 +79,9 @@ void PluginBrowser::rebuild()
     list.repaint();
     const int total = ctl.plugins.list (showInst).size();
     if (ctl.plugins.known.getNumTypes() > 0 && total == 0)
-        info.setText (juce::String ("No VST3 ") + (showInst ? "instruments" : "effects") + " found yet. Press Scan, or drop a .vst3 file on the slot.", juce::dontSendNotification);
+        info.setText (juce::String ("No " CX_PLUGIN_KINDS " ") + (showInst ? "instruments" : "effects") + " found yet. Press Scan, or drop a .vst3 file on the slot.", juce::dontSendNotification);
     else if (ctl.plugins.known.getNumTypes() == 0)
-        info.setText ("No plug-ins found yet. Press Scan to look for VST3 plug-ins on this PC (or drop a .vst3 file on a slot).", juce::dontSendNotification);
+        info.setText ("No plug-ins found yet. Press Scan to look for " CX_PLUGIN_KINDS " plug-ins on this " CX_COMPUTER " (or drop a .vst3 file on a slot).", juce::dontSendNotification);
     else
         info.setText (juce::String (rows.size()) + " of " + juce::String (total) + (showInst ? " instruments" : " effects")
                       + " - Enter or double-click loads into " + slot.label() + ". Esc closes.", juce::dontSendNotification);

@@ -57,7 +57,7 @@ public:
     void flashMidi() { ledT = juce::Time::getMillisecondCounter(); }
 private:
     Btn bSettings { "Audio / MIDI", "Choose the audio output, audio input and MIDI keyboard" },
-        bUndo { "Undo", "Undo (Ctrl+Z)" }, bRedo { "Redo", "Redo (Ctrl+Shift+Z or Ctrl+Y)" },
+        bUndo { "Undo", "Undo (" CX_MOD "+Z)" }, bRedo { "Redo", "Redo (" CX_REDO ")" },
         bQwerty { "QWERTY", "Play the keys from your computer keyboard: the Z-M and Q-I rows" },
         bPanic { "Panic", "Stop every sound" },
         bLearn { "MIDI Learn", "Link any pad, key, knob, button or slider to your controller: click this, click a control, then press / move the control on your controller" },
@@ -85,7 +85,7 @@ private:
     std::array<PitchKnob, 8> knobs;
     WaveformView wave { ctl };
     Btn bPrev { "<", "Previous region" }, bNext { ">", "Next region" }, bPlaySmp { "Play", "Play the selected region (or the whole sample)" },
-        bTrim { "Trim", "Trim the sample: drag the green handles, then Apply" }, bTrimOk { "Apply", "Commit the trim (Ctrl+Z undoes)" },
+        bTrim { "Trim", "Trim the sample: drag the green handles, then Apply" }, bTrimOk { "Apply", "Commit the trim (" CX_MOD "+Z undoes)" },
         bTrimX { "Cancel", "Leave the sample untouched" }, bZoomIn { "+", "Zoom in (mouse wheel)" }, bZoomOut { "-", "Zoom out" },
         bFit { "Fit", "Show the whole sample" },
         bChopWin { "Chop window", "Pop the sample out into its own big window to chop it" },
@@ -142,7 +142,7 @@ private:
         bGate { "Gate", "ON: a note stops when you let go. OFF: the sample plays out" },
         bVel { "Vel", "Velocity changes the level" },
         bChoke { "Choke", "ON: a new hit cuts off what you are playing. OFF: hits ring together" },
-        bClrPads { "Clear pads", "Remove the samples from all 64 pads (Ctrl+Z undoes)" },
+        bClrPads { "Clear pads", "Remove the samples from all 64 pads (" CX_MOD "+Z undoes)" },
         bClrKeys { "Clear keys", "Remove every chop-to-key assignment" },
         bHideKeys { "Hide keyboard" };
     juce::ComboBox rootBox; juce::Label lRoot, lDocked;
@@ -234,7 +234,7 @@ private:
         bBounce { "Bounce > pad", "Render the song (or pattern) onto the next empty pad, ready to chop or resample" },
         bBounceLib { "Bounce > library", "Render the song (or pattern) into the library (crate Bounces)" },
         bPadLib { "Pad > library", "Add the selected pad's sample to the selected crate" },
-        bLibRefresh { "Refresh", "Read the library folder again (picks up files you copied in with Explorer)" },
+        bLibRefresh { "Refresh", "Read the library folder again (picks up files you copied in with " CX_FILEMGR ")" },
         bLibSave { "Save", "Write the samples you added in the app into their crate folders (also happens when you close the app)" };
     juce::StringArray cratePaths;
     juce::ComboBox bitsBox, barsBox, crateBox, sortBox; juce::Label lBits, lBars, lName, status, lCrate;

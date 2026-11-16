@@ -76,6 +76,7 @@ void StepGrid::paint (juce::Graphics& g)
             if (ev) { g.setColour (on ? juce::Colours::white : col); g.fillEllipse (r.getCentreX() - 3, r.getCentreY() - 3, 6, 6); }
             if (on)
                 if (auto* d = T.find (ctl.P.s.pat))
+                {
                     if (d->chopAt[(size_t) s] >= 0)
                     {
                         g.setColour (juce::Colours::black); g.setFont (mono (8.5f, true));
@@ -86,6 +87,7 @@ void StepGrid::paint (juce::Graphics& g)
                         g.setColour (juce::Colours::black); g.setFont (mono (8.5f, true));
                         g.drawText (fmtSt (d->semi[(size_t) s]), r, juce::Justification::centred);
                     }
+                }
             if (s == nowStep) { g.setColour (C::fg.withAlpha (0.85f)); g.drawRoundedRectangle (r.expanded (1.0f), 3.0f, 2.0f); }
             if (inSel) { g.setColour (C::blue); g.drawRoundedRectangle (r, 3.0f, 1.6f); }
             // where a dragged selection will land

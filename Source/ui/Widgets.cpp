@@ -222,7 +222,7 @@ void PadButton::itemDropped (const SourceDetails& d)
         return;
     }
     const int from = d.description.toString().fromFirstOccurrenceOf ("pad:", false, false).getIntValue();
-    ctl.movePad (from, padIndex(), juce::ModifierKeys::currentModifiers.isCtrlDown() || juce::ModifierKeys::currentModifiers.isAltDown());
+    ctl.movePad (from, padIndex(), juce::ModifierKeys::currentModifiers.isCtrlDown() || juce::ModifierKeys::currentModifiers.isAltDown() || juce::ModifierKeys::currentModifiers.isCommandDown());
 }
 
 void PadButton::filesDropped (const juce::StringArray& files, int, int)

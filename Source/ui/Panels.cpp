@@ -468,7 +468,7 @@ Deck::Deck (Controller& c, Dialogs& d) : Panel (c, d)
     bChoke.onClick = [this] { ctl.toggle (ctl.P.s.choke, "CHOKE"); };
     bClrPads.onClick = [this]
     {
-        juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::WarningIcon, "Clear all pads?", "Remove the samples from all 64 pads? (Ctrl+Z undoes)", "Clear", "Cancel", this,
+        juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::WarningIcon, "Clear all pads?", "Remove the samples from all 64 pads? (" CX_MOD "+Z undoes)", "Clear", "Cancel", this,
             juce::ModalCallbackFunction::create ([this] (int r) { if (r == 1) ctl.clearAllPads(); }));
     };
     bClrKeys.onClick = [this] { ctl.clearKeys(); };
@@ -936,7 +936,7 @@ SongPanel::SongPanel (Controller& c, Dialogs& d) : Panel (c, d)
     songName.onEscapeKey = [this] { songName.giveAwayKeyboardFocus(); };
     bNew.onClick = [this]
     {
-        juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::QuestionIcon, "New song", "Start a new song? (Ctrl+Z brings this one back)", "New song", "Cancel", this,
+        juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::QuestionIcon, "New song", "Start a new song? (" CX_MOD "+Z brings this one back)", "New song", "Cancel", this,
             juce::ModalCallbackFunction::create ([this] (int r) { if (r == 1) ctl.newSong(); }));
     };
     bLoad.onClick = [this] { dlg.openFile ("Load CONTRXL 25 song", "*.zip", [this] (juce::File f) { ctl.loadSong (f); }); };
@@ -1030,7 +1030,7 @@ SongPanel::SongPanel (Controller& c, Dialogs& d) : Panel (c, d)
         auto s = selectedLib();
         if (s.empty()) return;
         juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::QuestionIcon, "Remove from the library",
-            "Remove " + juce::String ((int) s.size()) + " sample" + (s.size() > 1 ? "s" : "") + "? The files go to the Recycle Bin.", "Remove", "Cancel", this,
+            "Remove " + juce::String ((int) s.size()) + " sample" + (s.size() > 1 ? "s" : "") + "? The files go to the " CX_TRASH ".", "Remove", "Cancel", this,
             juce::ModalCallbackFunction::create ([this, s] (int r) mutable
             {
                 if (r != 1) return;
