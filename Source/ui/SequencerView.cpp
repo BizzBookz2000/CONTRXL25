@@ -186,6 +186,26 @@ void StepGrid::mouseDown (const juce::MouseEvent& e)
     int l, i;
     if (! hit (e.getPosition(), l, i)) return;
     const int s = ctl.ui.page * 16 + i;
+    if (e.mods.isPopupMenu())
+    {
+        // right click (Mac: also Ctrl+click): clear this step - penciled and live hits. Drag to clear more.
+        mode = ERASE; lastL = l; lastS = s;
+        undoMade = ctl.clearStep (l, s, true);
+        return;
+    }
+   #if JUCE_MAC
+    const bool copyMod = e.mods.isAltDown();                            // Option (Ctrl+click is a right click on a Mac)
+   #else
+    const bool copyMod = e.mods.isAltDown() || e.mods.isCtrlDown();      // Ctrl or Alt
+   #endif
+    if (copyMod && ! ctl.ui.selTool)
+    {
+        // Option (Mac) / Ctrl or Alt (Windows) + drag: copy this step onto every step you drag over
+        if (! ctl.stepHasAnything (l, s)) { ctl.status ("NOTHING ON THIS STEP TO COPY - " CX_COPYMOD_UP "-DRAG FROM A STEP THAT HAS A HIT"); return; }
+        mode = STAMP; stampL = l; stampS = s; lastL = l; lastS = s; undoMade = false;
+        ctl.status ("COPYING STEP " + juce::String (s + 1) + " - DRAG ONTO THE STEPS THAT SHOULD GET IT");
+        return;
+    }
     if (ctl.ui.selTool)
     {
         const auto& q = ctl.ui.sel;
@@ -201,7 +221,7 @@ void StepGrid::mouseDown (const juce::MouseEvent& e)
         return;
     }
     if (ctl.ui.lane != l) ctl.selectLane (l, false);
-    mode = PAINT; paintOn = ! (ctl.stepOn (l, s) || ctl.stepHasEv (l, s));   // a click on live hits clears them
+    mode = PAINT; paintOn = ! ctl.stepOn (l, s);
     ctl.setStep (l, s, paintOn);
 }
 
@@ -212,6 +232,13 @@ void StepGrid::mouseDrag (const juce::MouseEvent& e)
     if (! hit (e.getPosition(), l, i)) return;
     const int s = ctl.ui.page * 16 + i;
     if (mode == PAINT) ctl.setStep (l, s, paintOn);
+    else if ((mode == ERASE || mode == STAMP) && (l != lastL || s != lastS))
+    {
+        // one undo step for the whole drag: made by the first step that actually changes
+        lastL = l; lastS = s;
+        if (mode == ERASE) { if (ctl.clearStep (l, s, ! undoMade)) undoMade = true; }
+        else if (l != stampL || s != stampS) { ctl.copyStep (stampL, stampS, l, s, ! undoMade); undoMade = true; }
+    }
     else if (mode == MOVE)
     {
         moveDl = l - moveL; moveDs = s - moveS;
@@ -374,7 +401,7 @@ void SequencerView::refresh()
     bSong.setOn (ctl.P.s.song);
     bPop.setButtonText (popped ? "Dock" : "Pop out");
     bSong.setButtonText (ctl.P.s.song ? "Song mode: on" : "Song mode: off");
-    lTracks.setText (juce::String ((int) ctl.P.tracks.size()) + " tracks - click a number to select & hear it, M mute, S solo, R arm, L lock, drag the bar for volume. Click a step to add / clear it (also live hits, the dots)", juce::dontSendNotification);
+    lTracks.setText (juce::String ((int) ctl.P.tracks.size()) + " tracks - click a number to select & hear it, M mute, S solo, R arm, L lock, drag the bar for volume. Click a step: add / remove a hit. Right-click: clear the step (also live hits, the dots). " CX_COPYMOD "-drag a step onto other steps to copy it", juce::dontSendNotification);
     buildChain();
     grid.setSize (juce::jmax (400, view.getWidth() - view.getScrollBarThickness()), grid.preferredHeight());
     grid.repaint();

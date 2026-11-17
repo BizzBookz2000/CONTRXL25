@@ -353,12 +353,34 @@ int main()
         d.ev.push_back ({ 9 * TPS + 1, 0, 0.8f, -2 });     // live hit on step 10
         d.steps[4] = 1;                                     // and a penciled hit on step 5
         check (ctl.stepHasEv (0, 4) && ! ctl.stepOn (0, 9), "live hits sit in steps 5 and 10");
-        ctl.setStep (0, 9, false);                          // what a click on step 10 does
-        check (! ctl.stepHasEv (0, 9) && ctl.stepHasEv (0, 4), "click clears the live hit on step 10 only");
-        ctl.setStep (0, 4, false);
-        check (! ctl.stepHasEv (0, 4) && ! ctl.stepOn (0, 4) && P.tracks[0].find (3)->ev.empty(), "click clears step 5: live hits and the penciled hit");
+        ctl.setStep (0, 9, true);                           // left click on a live step: adds a penciled hit, live hit stays
+        check (ctl.stepOn (0, 9) && ctl.stepHasEv (0, 9), "left click no longer clears live hits");
+        ctl.setStep (0, 9, false);
+        check (ctl.clearStep (0, 9), "right click clears step 10");
+        check (! ctl.stepHasEv (0, 9) && ctl.stepHasEv (0, 4), "right click clears the live hit on step 10 only");
+        ctl.clearStep (0, 4);
+        check (! ctl.stepHasEv (0, 4) && ! ctl.stepOn (0, 4) && P.tracks[0].find (3)->ev.empty(), "right click clears step 5: live hits and the penciled hit");
+        check (! ctl.clearStep (0, 4), "right click on an empty step changes nothing");
         ctl.undo();
         check (ctl.stepHasEv (0, 4) && ctl.stepOn (0, 4), "undo brings them back");
+        // copy step 5 (penciled + 2 live hits, pitch) to steps 9 and 13, and to track 2 step 1
+        P.tracks[0].get (3).semi[4] = 5.0f;
+        ctl.copyStep (0, 4, 0, 8); ctl.copyStep (0, 4, 0, 12, false); ctl.copyStep (0, 4, 1, 0, false);
+        auto liveIn = [&] (int l, int st) { int n = 0; if (auto* dd = P.tracks[(size_t) l].find (3)) for (auto& x : dd->ev) if (x.t / TPS == st) ++n; return n; };
+        const auto& d3 = *P.tracks[0].find (3);
+        check (d3.steps[8] && d3.semi[8] == 5.0f && liveIn (0, 8) == 2 && liveIn (0, 12) == 2 && liveIn (1, 0) == 2 && P.tracks[1].find (3)->steps[0],
+               "copy step: penciled hit, pitch and both live hits copied (also to another track)");
+        bool sameOffset = false; for (auto& x : d3.ev) if (x.t == 8 * TPS + 2) sameOffset = true;
+        check (sameOffset, "copy step: live hits keep their timing inside the step");
+        ctl.copyStep (0, 4, 0, 8);
+        check (liveIn (0, 8) == 2, "copying onto a step replaces it (no doubled hits)");
+        ctl.undo(); ctl.undo();
+        check (liveIn (0, 8) == 0 && liveIn (1, 0) == 0, "undo removes a whole copy drag in one step");
+        // Select tool copy / paste now carries live hits
+        ctl.ui.hasSel = true; ctl.ui.sel = { 0, 0, 4, 5 }; ctl.copySteps();
+        ctl.ui.sel = { 0, 0, 10, 10 }; ctl.pasteSteps();
+        check (liveIn (0, 10) == 2 && P.tracks[0].find (3)->steps[10], "select copy / paste keeps live hits");
+        ctl.ui.hasSel = false;
         P.tracks[0].get (3).ev.clear(); P.tracks[0].get (3).steps.fill (0); P.s.pat = 0;
     }
 

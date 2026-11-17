@@ -862,18 +862,43 @@ void Controller::setStep (int lane, int step, bool on)
 {
     if (step >= P.plen[(size_t) P.s.pat]) return;
     auto* d = curData (lane);
-    if (! d) return;
-    // live hits recorded with Quantize off are kept as events inside the step: clicking (or
-    // erase-dragging over) a step clears them too; painting onto a live step leaves it as it is
-    const bool live = stepHasEv (lane, step);
-    if (on && live) return;
-    if ((d->steps[(size_t) step] != 0) == on && ! (! on && live)) return;
+    if (! d || (d->steps[(size_t) step] != 0) == on) return;
     pushUndo ("paint");
     d->steps[(size_t) step] = on ? 1 : 0;
     if (on) { d->semi[(size_t) step] = 0; d->chopAt[(size_t) step] = -2; }
-    if (! on && live)
-        d->ev.erase (std::remove_if (d->ev.begin(), d->ev.end(), [step] (const HitEvent& x) { return x.t / TPS == step; }), d->ev.end());
     changed();
+}
+
+bool Controller::clearStep (int lane, int step, bool withUndo)
+{
+    if (lane < 0 || lane >= (int) P.tracks.size() || step < 0 || step >= P.plen[(size_t) P.s.pat]) return false;
+    if (! stepHasAnything (lane, step)) return false;
+    if (withUndo) pushUndo();
+    auto& d = P.tracks[(size_t) lane].get (P.s.pat);
+    d.steps[(size_t) step] = 0; d.semi[(size_t) step] = 0; d.chopAt[(size_t) step] = -2;
+    d.ev.erase (std::remove_if (d.ev.begin(), d.ev.end(), [step] (const HitEvent& x) { return x.t / TPS == step; }), d.ev.end());
+    changed();
+    status ("STEP " + juce::String (step + 1) + " CLEARED ON TRACK " + juce::String (lane + 1) + " - " CX_MOD_UP "+Z UNDOES");
+    return true;
+}
+
+void Controller::copyStep (int fl, int fs, int tl, int ts, bool withUndo)
+{
+    const int len = P.plen[(size_t) P.s.pat];
+    if (fl < 0 || tl < 0 || fl >= (int) P.tracks.size() || tl >= (int) P.tracks.size()) return;
+    if (fs < 0 || ts < 0 || fs >= len || ts >= len || (fl == tl && fs == ts)) return;
+    const auto* src = P.tracks[(size_t) fl].find (P.s.pat);
+    if (src == nullptr) return;
+    const uint8_t on = src->steps[(size_t) fs]; const float semi = src->semi[(size_t) fs]; const int16_t chop = src->chopAt[(size_t) fs];
+    std::vector<HitEvent> ev;
+    for (auto e : src->ev) if (e.t / TPS == fs) { e.t += (ts - fs) * TPS; ev.push_back (e); }
+    if (withUndo) pushUndo();
+    auto& d = P.tracks[(size_t) tl].get (P.s.pat);
+    d.ev.erase (std::remove_if (d.ev.begin(), d.ev.end(), [ts] (const HitEvent& x) { return x.t / TPS == ts; }), d.ev.end());
+    d.steps[(size_t) ts] = on; d.semi[(size_t) ts] = semi; d.chopAt[(size_t) ts] = chop;
+    for (auto& e : ev) d.ev.push_back (e);
+    changed();
+    status ("STEP " + juce::String (fs + 1) + " COPIED TO STEP " + juce::String (ts + 1) + (fl != tl ? " OF TRACK " + juce::String (tl + 1) : juce::String()));
 }
 
 void Controller::selectLane (int l, bool audition)
@@ -1053,7 +1078,16 @@ void Controller::copySteps()
     {
         std::vector<StepCell> row;
         auto* d = P.tracks[(size_t) l].find (P.s.pat);
-        for (int s = ui.sel.s0; s <= ui.sel.s1; ++s) row.push_back (d ? StepCell { d->steps[(size_t) s], d->semi[(size_t) s], d->chopAt[(size_t) s] } : StepCell {});
+        for (int s = ui.sel.s0; s <= ui.sel.s1; ++s)
+        {
+            StepCell cell;
+            if (d)
+            {
+                cell.on = d->steps[(size_t) s]; cell.semi = d->semi[(size_t) s]; cell.chop = d->chopAt[(size_t) s];
+                for (auto e : d->ev) if (e.t / TPS == s) { e.t -= s * TPS; cell.ev.push_back (e); }
+            }
+            row.push_back (cell);
+        }
         stepClip.push_back (row);
     }
     status ("COPIED " + juce::String ((int) stepClip.size()) + " x " + juce::String ((int) stepClip[0].size()) + " STEPS - CLICK A STEP, THEN PASTE");
@@ -1074,9 +1108,10 @@ void Controller::pasteSteps()
         {
             const int s = s0 + c;
             if (s >= len) break;
-            d.steps[(size_t) s] = stepClip[(size_t) r][(size_t) c].on;
-            d.semi[(size_t) s] = stepClip[(size_t) r][(size_t) c].semi;
-            d.chopAt[(size_t) s] = stepClip[(size_t) r][(size_t) c].chop;
+            const auto& cell = stepClip[(size_t) r][(size_t) c];
+            d.steps[(size_t) s] = cell.on; d.semi[(size_t) s] = cell.semi; d.chopAt[(size_t) s] = cell.chop;
+            d.ev.erase (std::remove_if (d.ev.begin(), d.ev.end(), [s] (const HitEvent& x) { return x.t / TPS == s; }), d.ev.end());
+            for (auto e : cell.ev) { e.t += s * TPS; d.ev.push_back (e); }
         }
     }
     changed(); status ("STEPS PASTED");
@@ -1993,6 +2028,7 @@ void Controller::moveSteps (int dl, int ds, bool copy)
             if (s < 0 || s >= len) continue;
             const auto& cell = rows[(size_t) r][(size_t) c];
             d.steps[(size_t) s] = cell.on; d.semi[(size_t) s] = cell.semi; d.chopAt[(size_t) s] = cell.chop;
+            d.ev.erase (std::remove_if (d.ev.begin(), d.ev.end(), [s] (const HitEvent& x) { return x.t / TPS == s; }), d.ev.end());
             for (auto e : cell.ev) { e.t += ds * TPS; if (e.t >= 0 && e.t < len * TPS) d.ev.push_back (e); }
         }
     }

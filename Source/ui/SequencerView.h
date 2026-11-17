@@ -19,9 +19,10 @@ public:
 private:
     Controller& ctl;
     int lastNow = -2;
-    enum { NONE, PAINT, VOL, SELECT, MOVE } mode = NONE;
+    enum { NONE, PAINT, VOL, SELECT, MOVE, ERASE, STAMP } mode = NONE;
     int moveL = 0, moveS = 0, moveDl = 0, moveDs = 0;
     bool paintOn = true; int selL = 0, selS = 0;
+    int stampL = 0, stampS = 0, lastL = -1, lastS = -1; bool undoMade = false;   // Option/Alt-drag copy: source step, last step written
     juce::Rectangle<int> stepRect (int lane, int i) const;
     int stepsX() const { return 136 + 70 + 12; }   // lane, M, S, R, L, volume
     bool hit (juce::Point<int> p, int& lane, int& step) const;

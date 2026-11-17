@@ -161,7 +161,13 @@ public:
     void setPage (int p);
     void setPatternLength (int len);
     void setPatternBpm (int bpm);
-    void setStep (int lane, int step, bool on);
+    void setStep (int lane, int step, bool on);          // left click: a penciled hit on / off
+    // right click: clear everything on one step (penciled hit and live hits). withUndo = false when a
+    // drag continues an edit that already made its undo step.
+    bool clearStep (int lane, int step, bool withUndo = true);   // false = nothing was on it
+    // Option / Alt drag: copy one step (penciled hit, pitch, chop and live hits) onto another step
+    void copyStep (int fromLane, int fromStep, int toLane, int toStep, bool withUndo = true);
+    bool stepHasAnything (int lane, int step) const { return stepOn (lane, step) || stepHasEv (lane, step); }
     bool stepOn (int lane, int step) const;
     bool stepHasEv (int lane, int step) const;
     void selectLane (int l, bool audition);
@@ -310,7 +316,7 @@ private:
     std::optional<Pad> padClip;
     struct PatClip { int len, bpm; std::vector<std::optional<PatternData>> pd; };
     std::optional<PatClip> patClip;
-    struct StepCell { uint8_t on = 0; float semi = 0; int16_t chop = -2; };
+    struct StepCell { uint8_t on = 0; float semi = 0; int16_t chop = -2; std::vector<HitEvent> ev; };   // ev: live hits, t relative to the step
     std::vector<std::vector<StepCell>> stepClip;
     std::vector<double> taps;
     std::map<int, juce::uint32> ccLast; std::map<int, bool> ccDown;

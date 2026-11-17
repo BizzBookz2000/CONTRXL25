@@ -1,10 +1,17 @@
 # Changelog
 
+## 0.84.4
+- **Right-click a step to clear it** - the penciled hit and any live hits on it (the dots). Right-click and drag to
+  clear several steps; only the steps you touch change. A plain click is back to adding / removing a penciled hit
+  and no longer clears live hits. (Mac: Ctrl+click works as a right-click.) Ctrl/Cmd+Z undoes a whole drag.
+- **Copy a step onto other steps**: hold **Option** (Mac) or **Ctrl / Alt** (Windows), press on a step and drag over
+  the steps that should get it - each one becomes a copy (penciled hit, pitch, chop and live hits with their exact
+  timing). Works across tracks too. One undo step per drag.
+- Select tool Copy / Paste and drag-to-move now carry live hits as well (they used to drop them), and pasting onto
+  steps that already have live hits replaces them instead of doubling them.
+
 ## 0.84.3
-- **Click a step to clear a live performance off it.** Hits recorded live with Quantize off (the dots in the steps)
-  used to ignore clicks, so the only way out was clearing the whole track. Now a click on a step clears everything
-  on that step - live hits and a penciled hit - and dragging across steps clears each one you pass. Only that track,
-  only that step; Ctrl/Cmd+Z brings it back. Clicking an empty step still adds a hit as before.
+- Clearing live hits from a step (changed to a right-click in 0.84.4).
 
 ## 0.84.2
 - **Threshold is back in the sample window**: **Threshold** on/off and its **Level** sit right above Load / Sample /
