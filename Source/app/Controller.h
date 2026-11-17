@@ -182,6 +182,16 @@ public:
     // Record toggles recording. The same press arriving twice (e.g. a note AND an MMC message) counts once.
     void transportPress (const juce::String& which);   // "play", "stop", "playstop", "rec"
     bool playingNow() const;
+    // Recording timing test: the metronome plays, you tap any pad / key on each click; after
+    // calibTaps taps the average lateness becomes the record offset (saved for this computer).
+    static constexpr int calibTaps = 8;
+    void startTimingTest();
+    void stopTimingTest (bool apply);
+    bool timingTestRunning() const { return calib.on; }
+    int timingTestCount() const { return (int) calib.dev.size(); }
+    void setRecOffset (float ms);
+    float recOffset() const { return engine.recOffsetMs.load(); }
+    std::function<void()> onRecOffsetChanged;     // the app saves it in its settings
     // a transport control going down / up. Momentary buttons act on the press only; buttons that latch
     // (send "on" at the 1st press and "off" at the 2nd, like the MPK mini IV's in some modes) act on both.
     void transportEdge (const juce::String& which, const juce::String& control, bool down);
@@ -305,6 +315,8 @@ private:
     std::vector<double> taps;
     std::map<int, juce::uint32> ccLast; std::map<int, bool> ccDown;
     int captureTarget = 0; bool captureFromInput = true;
+    struct Calib { bool on = false, startedPlay = false, metroWas = false; std::vector<double> dev; } calib;
+    void calibHit (const EngineEvent& e);
     SamplePtr previewSample;
     std::map<int, PluginNode*> freshNodes;   // created by setPlugin, waiting for syncPlugins
     std::set<int> failedIids;

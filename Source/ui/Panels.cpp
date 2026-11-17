@@ -230,6 +230,10 @@ Faceplate::Faceplate (Controller& c, Dialogs& d) : Panel (c, d)
     };
     show (bLoad, bAddLay, bSample, bResample, bSaveWav, bTrans, bClearChops, bManual, bToPads, bToKeys, bExtract, bCopy, bPaste, bClear, bToLib);
     show (smpMeter);
+    bThr.onClick = [this] { ctl.ui.smpThr = ! ctl.ui.smpThr; ctl.status (ctl.ui.smpThr ? "SAMPLING WAITS FOR SOUND ABOVE THE LEVEL" : "SAMPLING STARTS AT ONCE"); ctl.sendChangeMessage(); };
+    thrLevel.labelWidth = 40; thrLevel.valueWidth = 50;
+    thrLevel.onChange = [this] (double v) { ctl.ui.smpThrDb = (float) v; ctl.sendChangeMessage(); };
+    show (bThr, thrLevel);
 }
 
 void Faceplate::stepRegion (int dir) { ctl.stepRegion (dir); }
@@ -297,6 +301,7 @@ void Faceplate::refresh()
 {
     bLoop.setOn (ctl.P.s.loop); bMetro.setOn (ctl.P.s.metro); bCount.setOn (ctl.P.s.count); bQuant.setOn (ctl.P.s.quant);
     bRec.setOn (ctl.ui.rec);
+    bThr.setOn (ctl.ui.smpThr); thrLevel.set (ctl.ui.smpThrDb); thrLevel.setEnabled (ctl.ui.smpThr);
     bpm.setValue (ctl.P.s.bpm, juce::dontSendNotification);
     for (int n = 0; n < 8; ++n)
     {
@@ -411,7 +416,13 @@ void Faceplate::resized()
     r.removeFromTop (4);
     auto tools2 = r.removeFromBottom (26); r.removeFromBottom (4);
     auto tools1 = r.removeFromBottom (26); r.removeFromBottom (4);
-    smpMeter.setBounds (r.removeFromBottom (14)); r.removeFromBottom (4);
+    {
+        // Threshold | Level | sample level meter
+        auto row = r.removeFromBottom (22); r.removeFromBottom (4);
+        bThr.setBounds (row.removeFromLeft (92)); row.removeFromLeft (6);
+        thrLevel.setBounds (row.removeFromLeft (juce::jlimit (150, 240, row.getWidth() / 3))); row.removeFromLeft (8);
+        smpMeter.setBounds (row.reduced (0, 2));
+    }
     if (fadeIn.isVisible())
     {
         auto tr2 = r.removeFromBottom (22); r.removeFromBottom (2);
@@ -638,9 +649,9 @@ SoundPanel::SoundPanel (Controller& c, Dialogs& d) : Panel (c, d)
     laGr.setFont (mono (12.0f, true)); laGr.setColour (juce::Label::textColourId, C::accent);
     show (laOn, laComp, laLim, laPr, laGain, laGr, vu);
 
-    sThr.onClick = [this] { ctl.ui.smpThr = ! ctl.ui.smpThr; ctl.status (ctl.ui.smpThr ? "SAMPLING WAITS FOR SOUND ABOVE THE LEVEL" : "SAMPLING STARTS AT ONCE"); };
+    sThr.onClick = [this] { ctl.ui.smpThr = ! ctl.ui.smpThr; ctl.status (ctl.ui.smpThr ? "SAMPLING WAITS FOR SOUND ABOVE THE LEVEL" : "SAMPLING STARTS AT ONCE"); ctl.sendChangeMessage(); };
     sCount.onClick = [this] { ctl.ui.smpCount = ! ctl.ui.smpCount; ctl.sendChangeMessage(); };
-    thrDb.onChange = [this] (double v) { ctl.ui.smpThrDb = (float) v; };
+    thrDb.onChange = [this] (double v) { ctl.ui.smpThrDb = (float) v; ctl.sendChangeMessage(); };
     smpInfo.setFont (mono (11.0f)); smpInfo.setColour (juce::Label::textColourId, C::mute);
     smpInfo.setJustificationType (juce::Justification::topLeft);
     show (sThr, sCount, thrDb, smpInfo, smpMeter);

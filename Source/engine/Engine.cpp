@@ -460,11 +460,14 @@ void Engine::renderVoice (Voice& v, float* L, float* R, int n)
 // ------------------------------------------------------------------ notes and pads
 void Engine::recordHit (int pad, int chop, float semi, float gain, int)
 {
-    if (! cur || ! seqPlaying || lastStep < 0 || ! recordArmed.load()) return;
+    if (! cur || ! seqPlaying || lastStep < 0) return;
+    const bool calib = calibrating.load();
+    if (! calib && ! recordArmed.load()) return;
     const double sd = 60.0 / cur->bpmOf (lastPat) / 4.0 * sr;
-    const double hit = (double) now - outLatency.load() - (limiterOn ? look.la : 0);
-    EngineEvent e; e.type = EngineEvent::RecHit;
+    const double hit = (double) now - outLatency.load() - (limiterOn ? look.la : 0) - recOffsetMs.load() * 0.001 * sr;
+    EngineEvent e; e.type = calib ? EngineEvent::CalibHit : EngineEvent::RecHit;
     e.a = pad; e.b = chop; e.c = lastPat; e.f = semi; e.g = gain;
+    if (calib) e.f = (float) cur->bpmOf (lastPat);   // the tap test needs the tempo to turn steps into ms
     e.pos = lastStep + (hit - lastStepTime) / sd;
     emit (e);
 }

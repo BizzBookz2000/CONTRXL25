@@ -316,6 +316,33 @@ int main()
         for (auto& pd : P.pads) pd.buf.reset();
     }
 
+    // Rec timing tap test: taps that arrive ~0.7 step late (Bluetooth-like) set the correction
+    {
+        ctl.setRecOffset (0);
+        P.s.bpm = 84; for (auto& b : P.pbpm) b = 0;
+        const bool metroWas = P.s.metro;
+        ctl.startTimingTest();
+        check (ctl.timingTestRunning() && ctl.engine.calibrating.load(), "timing test: running, engine reports taps");
+        const double stepMs = 60000.0 / 84.0 / 4.0;
+        const double lates[] = { 0.70, 0.66, 0.74, 0.69, 3.0, 0.71, 0.68, 0.72 };   // one stray tap (3 steps = a beat late)
+        int k = 0;
+        for (double d : lates)
+        {
+            EngineEvent ev; ev.type = EngineEvent::CalibHit; ev.a = 0; ev.f = 84.0f; ev.pos = (k % 4) * 4 + d; ++k;
+            ctl.handleEventForTest (ev);
+        }
+        // the stray 3.0 is nearest to the NEXT click (-1 step) and is dropped by the middle-half average
+        check (! ctl.timingTestRunning() && ! ctl.engine.calibrating.load(), "timing test: stops after 8 taps");
+        check (std::abs (ctl.recOffset() - 0.70 * stepMs) < 6.0, "timing test: correction = " + juce::String (ctl.recOffset(), 0) + " ms (expected ~" + juce::String (0.7 * stepMs, 0) + ")");
+        check (P.s.metro == metroWas, "timing test: metronome setting restored");
+        // early hits near the loop end (pos 15.8) count as 0.2 step early
+        ctl.setRecOffset (0);
+        ctl.startTimingTest();
+        for (int i = 0; i < 8; ++i) { EngineEvent ev; ev.type = EngineEvent::CalibHit; ev.f = 84.0f; ev.pos = 15.8; ctl.handleEventForTest (ev); }
+        check (std::abs (ctl.recOffset() + 0.2 * stepMs) < 2.0, "timing test: early taps across the loop end = negative correction");
+        ctl.setRecOffset (0);
+    }
+
     std::cout << (fails == 0 ? "ALL PASSED" : "FAILURES: " + std::to_string (fails)) << std::endl;
     return fails == 0 ? 0 : 1;
 }

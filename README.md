@@ -269,6 +269,12 @@ Notes:
 
 ---
 
+
+### Recorded hits land late (or on the step before)?
+Open **Sequencer > Rec timing...**, press **Start tap test** and tap any pad or key exactly on each click (8 times).
+The app measures the delay of your speakers / headphones / MIDI keyboard and corrects every recording from then on.
+Bluetooth headphones are the usual cause - wired headphones or the computer's speakers are tighter.
+
 ## 3. What is in the box
 
 ```

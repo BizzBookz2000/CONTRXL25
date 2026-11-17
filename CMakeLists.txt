@@ -6,7 +6,7 @@ if(CMAKE_HOST_APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum macOS version")
 endif()
 
-project(CONTRXL25 VERSION 0.84.1 LANGUAGES C CXX)
+project(CONTRXL25 VERSION 0.84.2 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -44,7 +44,7 @@ juce_add_gui_app(CONTRXL25
     PRODUCT_NAME        "CONTRXL 25"
     COMPANY_NAME        "Illahtainment"
     BUNDLE_ID           "com.illahtainment.contrxl25"
-    VERSION             "0.84.1"
+    VERSION             "0.84.2"
     ICON_BIG            "${CMAKE_CURRENT_SOURCE_DIR}/Assets/icon.png"
     DOCUMENT_EXTENSIONS zip wav aif aiff flac mp3 ogg m4a
     MICROPHONE_PERMISSION_ENABLED TRUE
@@ -194,4 +194,13 @@ if(CONTRXL_BUILD_TESTS)
     add_dependencies(ScanTest CONTRXL25_PluginScanner)
     add_custom_command(TARGET ScanTest POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:CONTRXL25_PluginScanner>" "$<TARGET_FILE_DIR:ScanTest>/")
+endif()
+if(CONTRXL_BUILD_TESTS)
+    juce_add_console_app(TimingTest PRODUCT_NAME "TimingTest")
+    target_sources(TimingTest PRIVATE Tests/TimingTest.cpp Source/model/Model.cpp Source/engine/Engine.cpp Source/engine/Snapshot.cpp
+        Source/engine/Effects.cpp Source/engine/Plugins.cpp Source/app/PluginManager.cpp Source/app/PluginScanner.cpp
+        Source/dsp/Offline.cpp Source/dsp/Stems.cpp)
+    target_include_directories(TimingTest PRIVATE Source)
+    target_compile_definitions(TimingTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=0 JUCE_PLUGINHOST_LADSPA=0)
+    target_link_libraries(TimingTest PRIVATE juce::juce_audio_utils juce::juce_dsp PUBLIC juce::juce_recommended_config_flags)
 endif()

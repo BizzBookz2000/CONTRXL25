@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.84.2
+- **Threshold is back in the sample window**: **Threshold** on/off and its **Level** sit right above Load / Sample /
+  Resample, next to the level meter. With Threshold on, Sample waits until the input rises above the level (the
+  blue line on the meter). Drag on the meter to move the line. Same setting as Sound > Sampling.
+- **Rec timing...** (sequencer, next to Rec all armed) - for recorded hits that land a step late, or on the step
+  before (e.g. hitting beat 1 lands on 16 or on 2). Sound and MIDI can reach you later than the computer reports -
+  Bluetooth headphones / speakers add 150-250 ms, about one step at 84 BPM. Press **Start tap test** and tap any
+  pad or key exactly on each click, 8 times: the app measures how late the taps arrive and moves every recorded hit
+  back by that much. A stray tap doesn't count. You can also set the correction by hand (-300 to +300 ms) or
+  **Reset** it. Saved for this computer (not in songs), so redo it if you change headphones / audio device.
+- `TimingTest` (with `-DCONTRXL_BUILD_TESTS=ON`) checks that a hit made when the click is heard lands on that step.
+
 ## 0.84.1 (macOS edition of 0.84.0)
 Everything in 0.84.0 (pads on keys, sample level meter, Sample into the next empty pad, iPad code, MPK mini
 support...) plus the Mac work, which is now part of the shared code:

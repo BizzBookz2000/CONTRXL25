@@ -125,9 +125,12 @@ public:
     void tick();                         // ~30 times a second from the panel that shows it
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;   // threshold on: drag sets the level (the blue line)
 private:
     Controller& ctl;
     bool compact;
+    juce::Rectangle<int> barsArea;
+    void setThresholdAt (int x);
     float lvl[2] {}, hold[2] { 0, 0 };
     juce::uint32 holdT[2] {};
     bool clip = false, fromOut = false, noInput = false;

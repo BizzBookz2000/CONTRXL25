@@ -92,6 +92,9 @@ private:
     std::array<PitchKnob, 8> knobs;
     WaveformView wave { ctl };
     SampleMeter smpMeter { ctl, true };   // input level, right above Sample / Resample
+    // sampling threshold, next to the meter (same setting as Sound > Sampling)
+    Btn bThr { "Threshold", "ON: Sample waits until the input rises above the level (the blue line on the meter - drag on the meter to move it)" };
+    LSlider thrLevel { "Level", -60, 0, 1, [] (double v) { return juce::String ((int) v) + " dB"; } };
     Btn bPrev { "<", "Previous region" }, bNext { ">", "Next region" }, bPlaySmp { "Play", "Play the selected region (or the whole sample)" },
         bTrim { "Trim", "Trim the sample: drag the green handles, then Apply" }, bTrimOk { "Apply", "Commit the trim (" CX_MOD "+Z undoes)" },
         bTrimX { "Cancel", "Leave the sample untouched" }, bZoomIn { "+", "Zoom in (mouse wheel)" }, bZoomOut { "-", "Zoom out" },

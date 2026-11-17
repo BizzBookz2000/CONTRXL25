@@ -1174,6 +1174,71 @@ void Controller::stop()
     status ("STOP");
 }
 
+// ------------------------------------------------------------------ recording timing
+void Controller::setRecOffset (float ms)
+{
+    engine.recOffsetMs.store (juce::jlimit (-500.0f, 500.0f, std::round (ms)));
+    if (onRecOffsetChanged) onRecOffsetChanged();
+    sendChangeMessage();
+}
+
+void Controller::startTimingTest()
+{
+    if (calib.on) return;
+    calib = Calib();
+    calib.on = true;
+    calib.metroWas = P.s.metro;
+    if (! P.s.metro) { P.s.metro = true; publish(); }
+    engine.calibrating.store (true);
+    if (! playingNow())
+    {
+        calib.startedPlay = true;
+        const bool recWas = ui.rec; ui.rec = false;    // a test, not a recording
+        const bool countWas = P.s.count;
+        play();
+        ui.rec = recWas; P.s.count = countWas;
+    }
+    status ("TIMING TEST - TAP ANY PAD OR KEY EXACTLY ON EACH CLICK (" + juce::String (calibTaps) + " TAPS)");
+    sendChangeMessage();
+}
+
+void Controller::stopTimingTest (bool apply)
+{
+    if (! calib.on) return;
+    engine.calibrating.store (false);
+    if (calib.startedPlay) stop();
+    if (P.s.metro != calib.metroWas) { P.s.metro = calib.metroWas; publish(); }
+    calib.on = false;
+    if (apply && calib.dev.size() >= 4)
+    {
+        auto d = calib.dev;
+        std::sort (d.begin(), d.end());
+        // middle half average: one stray tap can't throw the result off
+        const size_t a = d.size() / 4, b = d.size() - d.size() / 4;
+        double sum = 0; for (size_t i = a; i < b; ++i) sum += d[i];
+        const double late = sum / (double) (b - a);
+        setRecOffset (recOffset() + (float) late);
+        status ("RECORD TIMING SET: YOUR HITS ARRIVE " + juce::String (std::abs (recOffset()), 0) + " MS "
+                + (recOffset() >= 0 ? "LATE" : "EARLY") + " - RECORDING NOW CORRECTS IT");
+    }
+    else if (apply) status ("TIMING TEST STOPPED - NOT ENOUGH TAPS");
+    else status ("TIMING TEST CANCELLED");
+    sendChangeMessage();
+}
+
+void Controller::calibHit (const EngineEvent& e)
+{
+    if (! calib.on) return;
+    const double stepMs = 60000.0 / juce::jmax (20.0f, e.f) / 4.0;
+    const double beat = 4.0;                                  // a click every 4 steps
+    const double off = e.pos - beat * std::round (e.pos / beat);   // steps from the nearest click (+ = late)
+    calib.dev.push_back (off * stepMs);
+    statusText = "TIMING TEST - TAP " + juce::String ((int) calib.dev.size()) + " OF " + juce::String (calibTaps)
+                 + ": " + juce::String (std::abs (off * stepMs), 0) + " MS " + (off >= 0 ? "LATE" : "EARLY");
+    if ((int) calib.dev.size() >= calibTaps) stopTimingTest (true);
+    else sendChangeMessage();
+}
+
 bool Controller::playingNow() const
 {
     // the audio thread takes a moment to start / stop: trust the command we just sent
@@ -1399,6 +1464,7 @@ void Controller::handleEvent (const EngineEvent& e)
     switch (e.type)
     {
         case EngineEvent::RecHit: applyRecHit (e); break;
+        case EngineEvent::CalibHit: calibHit (e); break;
         case EngineEvent::TransportCC:
         {
             if (e.c == 1) { statusText = "MIDI CC" + juce::String (e.a) + " = " + juce::String (e.b) + " - NOT LINKED - USE MIDI LEARN TO LINK IT"; break; }

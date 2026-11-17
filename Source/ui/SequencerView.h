@@ -4,6 +4,7 @@
 
 namespace cx::ui
 {
+void showTimingBox (Controller& ctl, juce::Component& anchor);   // Rec timing... (tap test)
 class StepGrid : public juce::Component
 {
 public:
@@ -54,6 +55,7 @@ private:
         bSolo { "Solo", "Solo the selected track (only soloed tracks play)" },
         bLock { "Lock", "Lock the selected track: live recording never writes into it" },
         bRecAll { "Rec all armed", "OFF: a hit records on the armed track that plays that pad (or the next empty armed track). ON: every armed track records every hit, each with its own sound (layering)" },
+        bTiming { "Rec timing...", "If your recorded hits land a step late or early: tap along with the click once and the app corrects it" },
         bSelTrk { "Select track", "Select every step of the selected track (then copy, move, transpose...)" },
         bChainClr { "Clear chain", "Remove every step of the song chain" };
     juce::Label lPat, lLen, lBpm, lPage, lTrack, lPad, lChop, lChain, lTracks;

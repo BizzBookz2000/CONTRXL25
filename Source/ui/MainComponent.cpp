@@ -346,6 +346,8 @@ MainComponent::MainComponent()
     host.setNoteFilter (props->getValue ("noteFilter"));
     ctl.ui.keysVisible = props->getBoolValue ("keysVisible", true);
     ctl.ui.recAllArmed = props->getBoolValue ("recAllArmed", false);
+    ctl.engine.recOffsetMs.store ((float) props->getDoubleValue ("recOffsetMs", 0.0));   // this computer's recording timing
+    ctl.onRecOffsetChanged = [this] { if (props) { props->setValue ("recOffsetMs", (double) ctl.recOffset()); props->saveIfNeeded(); } };
     ctl.midiMapFromVar (juce::JSON::parse (props->getValue ("midiMap", "{}")));
     ctl.pushMidiMap();
     profile = juce::jlimit (0, 2, props->getIntValue ("ctlProfile", props->getBoolValue ("mpkIV", false) ? 1 : 0));
@@ -395,6 +397,7 @@ MainComponent::~MainComponent()
     props->setValue ("lastDir", lastDir.getFullPathName());
     props->setValue ("keysVisible", ctl.ui.keysVisible);
     props->setValue ("recAllArmed", ctl.ui.recAllArmed);
+    props->setValue ("recOffsetMs", (double) ctl.recOffset());
     if (midiWin) { props->setValue ("win_midi", midiWin->getWindowStateAsString()); midiWin.reset(); }
     learnMain.reset();
     saveMidiPrefs();

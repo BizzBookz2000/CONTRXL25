@@ -406,9 +406,26 @@ void SampleMeter::tick()
     if (changed || clip) repaint();
 }
 
-void SampleMeter::mouseDown (const juce::MouseEvent&)
+void SampleMeter::mouseDown (const juce::MouseEvent& e)
 {
     clip = false; hold[0] = hold[1] = 0;
+    if (ctl.ui.smpThr && ! fromOut && barsArea.contains (e.getPosition())) setThresholdAt (e.x);
+    repaint();
+}
+
+void SampleMeter::mouseDrag (const juce::MouseEvent& e)
+{
+    if (ctl.ui.smpThr && ! fromOut && ! barsArea.isEmpty()) setThresholdAt (e.x);
+}
+
+void SampleMeter::setThresholdAt (int x)
+{
+    const float f = juce::jlimit (0.0f, 1.0f, (float) (x - barsArea.getX()) / (float) juce::jmax (1, barsArea.getWidth()));
+    const float db = (float) juce::jlimit (-60, -1, (int) std::round (-60.0f + 60.0f * f));
+    if (std::abs (db - ctl.ui.smpThrDb) < 0.5f) return;
+    ctl.ui.smpThrDb = db;
+    ctl.status ("SAMPLING THRESHOLD " + juce::String ((int) db) + " DB");
+    ctl.sendChangeMessage();
     repaint();
 }
 
@@ -438,6 +455,7 @@ void SampleMeter::paint (juce::Graphics& g)
     if (! compact && r.getHeight() >= 26) scale = r.removeFromBottom (10);
     if (noInput)
     {
+        barsArea = {};
         g.setColour (C::well); g.fillRoundedRectangle (r.toFloat(), 2.5f);
         g.setColour (C::mute); g.setFont (mono (compact ? 9.5f : 10.5f));
         g.drawText ("No audio input - pick one in Audio / MIDI devices", r.reduced (4, 0), juce::Justification::centredLeft);
@@ -464,6 +482,7 @@ void SampleMeter::paint (juce::Graphics& g)
             g.fillRect (juce::Rectangle<float> (in.getX() + in.getWidth() * pct (h) - 1.0f, (float) in.getY(), 2.0f, (float) in.getHeight()));
         }
     };
+    barsArea = r;
     const int gap = compact ? 1 : 2;
     const int h = juce::jmax (3, (r.getHeight() - gap) / 2);
     auto rl = r.removeFromTop (h); r.removeFromTop (gap); auto rr = r.removeFromTop (h);

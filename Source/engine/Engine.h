@@ -32,7 +32,7 @@ struct Command
 struct EngineEvent
 {
     enum Type : int { None, RecHit, TransportCC, PitchKnob, ModWheel, Bend, KeyLight, OctFollow, Finished, CaptureFull, MidiIn, Transport,
-                      Learn, MapFire, PadSelect, LowKey, PitchKnobRel };
+                      Learn, MapFire, PadSelect, LowKey, PitchKnobRel, CalibHit };
     Type type = None;
     int a = 0, b = 0, c = 0;
     int ch = 0;                       // MIDI channel 0..15 (Learn, MapFire)
@@ -118,6 +118,10 @@ public:
     std::atomic<int>   countInLeft { 0 };
     std::atomic<int>   countInKind { 0 };          // 0 count-in, 1 recording, 2 sampling
     std::atomic<bool>  recordArmed { false };      // REC button
+    // Recording timing: hits are moved this many ms earlier before they land on a step (sound or MIDI delay
+    // the computer doesn't report, e.g. Bluetooth headphones). Set by the tap test or by hand.
+    std::atomic<float> recOffsetMs { 0 };
+    std::atomic<bool>  calibrating { false };      // tap test running: hits report their timing (CalibHit)
     std::array<std::atomic<juce::uint32>, NPADS> padHits;   // increments on every trigger
 
     // ---- audio thread

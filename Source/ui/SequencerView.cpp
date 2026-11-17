@@ -2,6 +2,74 @@
 
 namespace cx::ui
 {
+namespace
+{
+    // "Rec timing...": tap along with the metronome so recorded hits land where you played them
+    class TimingBox : public juce::Component, private juce::Timer, private juce::ChangeListener
+    {
+    public:
+        explicit TimingBox (Controller& c) : ctl (c)
+        {
+            title.setText ("Recording timing", juce::dontSendNotification);
+            title.setFont (mono (13.0f, true)); title.setColour (juce::Label::textColourId, C::accent);
+            help.setText ("Recorded hits landing a step late (or on the step before)? Sound and MIDI can reach you later than "
+                          "the computer knows - Bluetooth headphones especially. Press Start, then tap any pad or key exactly on "
+                          "each click, " + juce::String (Controller::calibTaps) + " times. The app measures how late your taps arrive "
+                          "and corrects every recording from then on (saved for this computer).", juce::dontSendNotification);
+            help.setFont (mono (11.0f)); help.setColour (juce::Label::textColourId, C::fg);
+            help.setJustificationType (juce::Justification::topLeft);
+            progress.setFont (mono (12.0f, true)); progress.setColour (juce::Label::textColourId, C::accent);
+            offset.labelWidth = 92; offset.valueWidth = 70;
+            offset.onChange = [this] (double v) { ctl.setRecOffset ((float) v); };
+            bStart.onClick = [this] { if (ctl.timingTestRunning()) ctl.stopTimingTest (false); else ctl.startTimingTest(); update(); };
+            bReset.onClick = [this] { ctl.setRecOffset (0); ctl.status ("RECORD TIMING RESET TO 0 MS"); update(); };
+            for (auto* c2 : { (juce::Component*) &title, (juce::Component*) &help, (juce::Component*) &progress,
+                              (juce::Component*) &offset, (juce::Component*) &bStart, (juce::Component*) &bReset })
+                addAndMakeVisible (c2);
+            ctl.addChangeListener (this);
+            update();
+            startTimerHz (10);
+            setSize (470, 230);
+        }
+        ~TimingBox() override
+        {
+            ctl.removeChangeListener (this);   // a running test goes on (clicking a pad closes this box); the status line counts the taps
+        }
+        void update()
+        {
+            const bool run = ctl.timingTestRunning();
+            bStart.setButtonText (run ? "Stop test" : "Start tap test");
+            offset.set (ctl.recOffset());
+            const float o = ctl.recOffset();
+            progress.setText (run ? "Tap on every click: " + juce::String (ctl.timingTestCount()) + " / " + juce::String (Controller::calibTaps)
+                                  : (std::abs (o) < 0.5f ? juce::String ("No correction (0 ms)")
+                                                         : "Hits are moved " + juce::String (std::abs (o), 0) + " ms " + (o > 0 ? "earlier" : "later")),
+                              juce::dontSendNotification);
+        }
+        void resized() override
+        {
+            auto r = getLocalBounds().reduced (10);
+            title.setBounds (r.removeFromTop (22)); r.removeFromTop (2);
+            help.setBounds (r.removeFromTop (92)); r.removeFromTop (4);
+            progress.setBounds (r.removeFromTop (22)); r.removeFromTop (4);
+            offset.setBounds (r.removeFromTop (24)); r.removeFromTop (8);
+            layoutRow (r.removeFromTop (28), { { &bStart, 0 }, { &bReset, 120 } }, 6);
+        }
+    private:
+        void timerCallback() override { update(); }
+        void changeListenerCallback (juce::ChangeBroadcaster*) override { update(); }
+        Controller& ctl;
+        juce::Label title, help, progress;
+        LSlider offset { "Correction", -300, 300, 1, [] (double v) { return (v > 0 ? "+" : "") + juce::String ((int) v) + " ms"; } };
+        Btn bStart { "Start tap test" }, bReset { "Reset", "No correction (0 ms)" };
+    };
+}
+
+void showTimingBox (Controller& ctl, juce::Component& anchor)
+{
+    juce::CallOutBox::launchAsynchronously (std::make_unique<TimingBox> (ctl), anchor.getScreenBounds(), nullptr);
+}
+
 // ------------------------------------------------------------------ StepGrid
 juce::Rectangle<int> StepGrid::stepRect (int lane, int i) const
 {
@@ -233,6 +301,8 @@ SequencerView::SequencerView (Controller& c) : ctl (c)
     bRecAll.onClick = [this] { ctl.ui.recAllArmed = ! ctl.ui.recAllArmed; ctl.status (ctl.ui.recAllArmed ? "REC ALL ARMED: EVERY ARMED TRACK RECORDS EVERY HIT" : "REC: EACH PAD GOES TO ITS OWN ARMED TRACK"); };
     bRecAll.setOnColour (C::rec);
     for (auto* b : { &bSolo, &bLock, &bRecAll }) addAndMakeVisible (b);
+    bTiming.onClick = [this] { showTimingBox (ctl, bTiming); };
+    addAndMakeVisible (bTiming);
     bSelTrk.onClick = [this] { ctl.selectTrackSteps(); };
     bChainClr.onClick = [this] { ctl.chainClear(); };
     for (auto* b : { &bMute, &bSelTrk, &bChainClr }) addAndMakeVisible (b);
@@ -329,7 +399,7 @@ void SequencerView::resized()
     lPage.setBounds (row2.removeFromLeft (44));
     for (auto* b : pageBtns) if (b->isVisible()) { b->setBounds (row2.removeFromLeft (58)); row2.removeFromLeft (3); }
     row2.removeFromLeft (10);
-    layoutRow (row2, { { &bSelTool, 70 }, { &bSelCopy, 56 }, { &bSelPaste, 56 }, { &bSelDel, 62 }, { &bTrDn12, 40 }, { &bTrDn, 34 }, { &bTrUp, 34 }, { &bTrUp12, 40 }, { &bSelTrk, 92 }, { nullptr, 0 }, { &bRecAll, 112 }, { &bPop, 80 } }, 3);
+    layoutRow (row2, { { &bSelTool, 70 }, { &bSelCopy, 56 }, { &bSelPaste, 56 }, { &bSelDel, 62 }, { &bTrDn12, 40 }, { &bTrDn, 34 }, { &bTrUp, 34 }, { &bTrUp12, 40 }, { &bSelTrk, 92 }, { nullptr, 0 }, { &bTiming, 104 }, { &bRecAll, 112 }, { &bPop, 80 } }, 3);
     r.removeFromTop (6);
     auto row3 = r.removeFromTop (28);
     layoutRow (row3, { { &lTrack, 76 }, { &lPad, 30 }, { &padBox, 70 }, { &lChop, 36 }, { &chopBox, 120 }, { &bArm, 46 }, { &bLock, 50 }, { &bMute, 48 }, { &bSolo, 46 }, { &bAdd, 70 },
