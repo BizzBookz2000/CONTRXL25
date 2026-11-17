@@ -343,6 +343,25 @@ int main()
         ctl.setRecOffset (0);
     }
 
+    // clearing live (unquantized) hits from one step with a click
+    {
+        P.s.pat = 3; ctl.ui.page = 0;
+        auto& d = P.tracks[0].get (3);
+        d.steps.fill (0); d.ev.clear();
+        d.ev.push_back ({ 4 * TPS + 2, 0, 0.8f, -2 });     // live hit on step 5
+        d.ev.push_back ({ 4 * TPS + 20, 0, 0.8f, -2 });    // another one, same step
+        d.ev.push_back ({ 9 * TPS + 1, 0, 0.8f, -2 });     // live hit on step 10
+        d.steps[4] = 1;                                     // and a penciled hit on step 5
+        check (ctl.stepHasEv (0, 4) && ! ctl.stepOn (0, 9), "live hits sit in steps 5 and 10");
+        ctl.setStep (0, 9, false);                          // what a click on step 10 does
+        check (! ctl.stepHasEv (0, 9) && ctl.stepHasEv (0, 4), "click clears the live hit on step 10 only");
+        ctl.setStep (0, 4, false);
+        check (! ctl.stepHasEv (0, 4) && ! ctl.stepOn (0, 4) && P.tracks[0].find (3)->ev.empty(), "click clears step 5: live hits and the penciled hit");
+        ctl.undo();
+        check (ctl.stepHasEv (0, 4) && ctl.stepOn (0, 4), "undo brings them back");
+        P.tracks[0].get (3).ev.clear(); P.tracks[0].get (3).steps.fill (0); P.s.pat = 0;
+    }
+
     std::cout << (fails == 0 ? "ALL PASSED" : "FAILURES: " + std::to_string (fails)) << std::endl;
     return fails == 0 ? 0 : 1;
 }

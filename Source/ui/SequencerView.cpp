@@ -201,7 +201,7 @@ void StepGrid::mouseDown (const juce::MouseEvent& e)
         return;
     }
     if (ctl.ui.lane != l) ctl.selectLane (l, false);
-    mode = PAINT; paintOn = ! ctl.stepOn (l, s);
+    mode = PAINT; paintOn = ! (ctl.stepOn (l, s) || ctl.stepHasEv (l, s));   // a click on live hits clears them
     ctl.setStep (l, s, paintOn);
 }
 
@@ -374,7 +374,7 @@ void SequencerView::refresh()
     bSong.setOn (ctl.P.s.song);
     bPop.setButtonText (popped ? "Dock" : "Pop out");
     bSong.setButtonText (ctl.P.s.song ? "Song mode: on" : "Song mode: off");
-    lTracks.setText (juce::String ((int) ctl.P.tracks.size()) + " tracks - click a number to select & hear it, M mute, S solo, R arm, L lock, drag the bar for volume", juce::dontSendNotification);
+    lTracks.setText (juce::String ((int) ctl.P.tracks.size()) + " tracks - click a number to select & hear it, M mute, S solo, R arm, L lock, drag the bar for volume. Click a step to add / clear it (also live hits, the dots)", juce::dontSendNotification);
     buildChain();
     grid.setSize (juce::jmax (400, view.getWidth() - view.getScrollBarThickness()), grid.preferredHeight());
     grid.repaint();

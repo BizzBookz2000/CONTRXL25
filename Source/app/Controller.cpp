@@ -862,10 +862,17 @@ void Controller::setStep (int lane, int step, bool on)
 {
     if (step >= P.plen[(size_t) P.s.pat]) return;
     auto* d = curData (lane);
-    if (! d || (d->steps[(size_t) step] != 0) == on) return;
+    if (! d) return;
+    // live hits recorded with Quantize off are kept as events inside the step: clicking (or
+    // erase-dragging over) a step clears them too; painting onto a live step leaves it as it is
+    const bool live = stepHasEv (lane, step);
+    if (on && live) return;
+    if ((d->steps[(size_t) step] != 0) == on && ! (! on && live)) return;
     pushUndo ("paint");
     d->steps[(size_t) step] = on ? 1 : 0;
     if (on) { d->semi[(size_t) step] = 0; d->chopAt[(size_t) step] = -2; }
+    if (! on && live)
+        d->ev.erase (std::remove_if (d->ev.begin(), d->ev.end(), [step] (const HitEvent& x) { return x.t / TPS == step; }), d->ev.end());
     changed();
 }
 

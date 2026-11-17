@@ -6,7 +6,7 @@ if(CMAKE_HOST_APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum macOS version")
 endif()
 
-project(CONTRXL25 VERSION 0.84.2 LANGUAGES C CXX)
+project(CONTRXL25 VERSION 0.84.3 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -44,7 +44,7 @@ juce_add_gui_app(CONTRXL25
     PRODUCT_NAME        "CONTRXL 25"
     COMPANY_NAME        "Illahtainment"
     BUNDLE_ID           "com.illahtainment.contrxl25"
-    VERSION             "0.84.2"
+    VERSION             "0.84.3"
     ICON_BIG            "${CMAKE_CURRENT_SOURCE_DIR}/Assets/icon.png"
     DOCUMENT_EXTENSIONS zip wav aif aiff flac mp3 ogg m4a
     MICROPHONE_PERMISSION_ENABLED TRUE

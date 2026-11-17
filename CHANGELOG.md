@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.84.3
+- **Click a step to clear a live performance off it.** Hits recorded live with Quantize off (the dots in the steps)
+  used to ignore clicks, so the only way out was clearing the whole track. Now a click on a step clears everything
+  on that step - live hits and a penciled hit - and dragging across steps clears each one you pass. Only that track,
+  only that step; Ctrl/Cmd+Z brings it back. Clicking an empty step still adds a hit as before.
+
 ## 0.84.2
 - **Threshold is back in the sample window**: **Threshold** on/off and its **Level** sit right above Load / Sample /
   Resample, next to the level meter. With Threshold on, Sample waits until the input rises above the level (the
