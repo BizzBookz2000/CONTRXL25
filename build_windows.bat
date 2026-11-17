@@ -199,8 +199,9 @@ echo   Done!  dist\CONTRXL 25.exe
 echo   Keep "CONTRXL25_PluginScanner.exe" in the same folder as the app.
 echo  ==========================================================
 echo.
-start "" "%~dp0dist"
-pause
+rem make_installer_windows.bat sets CONTRXL_NOPAUSE=1: no folder window, no pause
+if not defined CONTRXL_NOPAUSE start "" "%~dp0dist"
+if not defined CONTRXL_NOPAUSE pause
 exit /b 0
 
 :jucefail

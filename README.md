@@ -127,6 +127,14 @@ Universal app (Intel + Apple silicon): add `-DCMAKE_OSX_ARCHITECTURES="x86_64;ar
 
 ---
 
+## 1c. Make a setup program (installer) to give to others
+
+`make_installer_windows.bat` (on a PC) builds `installers\CONTRXL25-<version>-Windows-Setup.exe`: a standard setup
+wizard with license agreement, install folder, Start Menu and desktop shortcuts, and an uninstaller in Settings > Apps.
+`Make Mac Installer.command` (on a Mac) builds `installers/CONTRXL25-<version>-Mac.dmg` with an installer package
+(Introduction > License > Install), the User's Manual and an uninstaller. Details, code signing and the
+"unknown publisher" warnings: `installer/README.md`.
+
 ## 2. First run
 
 * **Size** (top bar): *Fit* scales the app to your screen; pick a percentage to make it bigger or smaller.

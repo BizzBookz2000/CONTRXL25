@@ -1,5 +1,17 @@
 # Changelog
 
+## Installers (for 0.84.4)
+- **Windows setup program**: `make_installer_windows.bat` builds `CONTRXL25-<version>-Windows-Setup.exe` with
+  Inno Setup (downloaded automatically). Pages: install for everyone / just me, Welcome, License, folder,
+  Start Menu folder, desktop shortcut, Install, Finish (launch). Uninstaller in Settings > Apps; it asks before
+  removing settings and never touches the sample library. Newer versions install over older ones.
+- **Mac installer**: `Make Mac Installer.command` / `make_installer_mac.sh` builds `CONTRXL25-<version>-Mac.dmg`:
+  `Install CONTRXL 25.pkg` (Introduction, License, Install into Applications), the User's Manual,
+  `Uninstall CONTRXL 25.command` and the license.
+- Optional code signing for both (Windows certificate; Apple Developer ID + notarization). See `installer/README.md`.
+- `build_windows.bat` / `build_mac.sh` take `CONTRXL_NOPAUSE=1` / `CONTRXL_NO_INSTALL=1` so the installer scripts can call them.
+- The User's Manual PDF is in `docs/` and is installed with the app.
+
 ## 0.84.4
 - **Right-click a step to clear it** - the penciled hit and any live hits on it (the dots). Right-click and drag to
   clear several steps; only the steps you touch change. A plain click is back to adding / removing a penciled hit

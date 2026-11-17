@@ -102,6 +102,9 @@ ditto "$APP" "dist/CONTRXL 25.app"
 codesign --force --deep --sign - "dist/CONTRXL 25.app" >/dev/null 2>&1 || echo "  (ad-hoc signing skipped)"
 xattr -dr com.apple.quarantine "dist/CONTRXL 25.app" 2>/dev/null
 
+# make_installer_mac.sh sets CONTRXL_NO_INSTALL=1: build into dist/ only (the installer installs it)
+if [ "${CONTRXL_NO_INSTALL:-}" = "1" ]; then echo "  Built: $HERE/dist/CONTRXL 25.app"; exit 0; fi
+
 # ---- 6. install into /Applications (so it shows in Launchpad / Spotlight)
 INSTALLED=""
 if ditto "dist/CONTRXL 25.app" "/Applications/CONTRXL 25.app.new" 2>/dev/null; then

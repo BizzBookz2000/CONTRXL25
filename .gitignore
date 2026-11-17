@@ -9,3 +9,7 @@ build-mac/
 tools/
 .DS_Store
 JUCE
+
+installers/
+build-installer/
+tools/

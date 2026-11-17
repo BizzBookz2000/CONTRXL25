@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- CONTRXL 25 macOS installer. make_installer_mac.sh fills in __VERSION__. -->
+<installer-gui-script minSpecVersion="2">
+    <title>CONTRXL 25</title>
+    <organization>com.illahtainment</organization>
+    <welcome file="welcome.html" mime-type="text/html"/>
+    <license file="License.txt"/>
+    <conclusion file="conclusion.html" mime-type="text/html"/>
+    <background file="background.png" alignment="bottomleft" scaling="none"/>
+    <background-darkAqua file="background.png" alignment="bottomleft" scaling="none"/>
+    <options customize="never" require-scripts="false" hostArchitectures="x86_64,arm64" rootVolumeOnly="true"/>
+    <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+    <volume-check>
+        <allowed-os-versions><os-version min="10.13"/></allowed-os-versions>
+    </volume-check>
+    <choices-outline>
+        <line choice="default"><line choice="com.illahtainment.contrxl25"/></line>
+    </choices-outline>
+    <choice id="default"/>
+    <choice id="com.illahtainment.contrxl25" visible="false">
+        <pkg-ref id="com.illahtainment.contrxl25"/>
+    </choice>
+    <pkg-ref id="com.illahtainment.contrxl25" version="__VERSION__" onConclusion="none">CONTRXL25-app.pkg</pkg-ref>
+</installer-gui-script>
