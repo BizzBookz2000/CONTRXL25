@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.illahtainment.contrxl25"
+    android:versionCode="5"
+    android:versionName="web v5">
+
+    <!-- Android 7.0 or newer; built for current Android -->
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
+
+    <!-- Sample: record from the microphone or an audio interface -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Saving .wav / song .zip into Downloads on Android 7 to 9 (newer Android needs no permission) -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+
+    <uses-feature android:name="android.software.midi" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <application
+        android:label="CONTRXL 25"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@style/AppTheme"
+        android:hardwareAccelerated="true"
+        android:largeHeap="true"
+        android:allowBackup="true">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

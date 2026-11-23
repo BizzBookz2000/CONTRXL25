@@ -9,6 +9,24 @@ and open it here, and the other way round.
 
 ---
 
+## What's in this repository
+
+| Folder / file | What it is |
+|---|---|
+| `Source/`, `CMakeLists.txt`, `Assets/` | The desktop app (JUCE 8 / C++17) for Windows, macOS and Linux |
+| `build_windows.bat`, `build_mac.sh`, `Build CONTRXL 25.command` | One-click builds (JUCE is downloaded automatically the first time) |
+| `installer/`, `make_installer_*` | Commercial-style setups: Windows Setup.exe (Inno Setup) and Mac .pkg/.dmg |
+| `CONTRXL25_iPad.jucer`, `Builds/iOS/`, `JuceLibraryCode/`, `README_iPad.md` | iPad version (Xcode) |
+| `android/` | Android app (.apk) — see `android/README-Android.md` |
+| `web/CONTRXL25.html` | The original web version (runs in Chrome/Edge) |
+| `docs/` | User's manual (PDF) |
+| `Tests/` | Timing test for the sequencer |
+
+The Android signing key (`android/keystore/`) is deliberately **not** in the repository. Keep your copy backed up:
+updates to the Android app must be signed with the same key.
+
+---
+
 ## 1. Build it on your PC (Windows 10/11)
 
 ### What to install (one time, all free)

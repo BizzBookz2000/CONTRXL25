@@ -13,3 +13,11 @@ JUCE
 installers/
 build-installer/
 tools/
+
+# Android: build output, generated assets and the private signing key (keep the key backed up elsewhere!)
+android/build/
+android/dist/
+android/assets/www/
+android/keystore/
+*.jks
+*.keystore

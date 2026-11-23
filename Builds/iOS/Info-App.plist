@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist>
+  <dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>CONTRXL 25 records from your audio input when you press Sample.</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>CONTRXL 25 uses Bluetooth to connect Bluetooth MIDI keyboards and pad controllers.</string>
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>CONTRXL 25 uses Bluetooth to connect Bluetooth MIDI keyboards and pad controllers.</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>UIViewControllerBasedStatusBarAppearance</key>
+    <true/>
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+      <key>UIApplicationSupportsMultipleScenes</key>
+      <false/>
+      <key>UISceneConfigurations</key>
+      <dict/>
+    </dict>
+    <key>CFBundleExecutable</key>
+    <string>${EXECUTABLE_NAME}</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.illahtainment.contrxl25</string>
+    <key>CFBundleName</key>
+    <string>CONTRXL25</string>
+    <key>CFBundleDisplayName</key>
+    <string>CONTRXL25</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.84.0</string>
+    <key>CFBundleVersion</key>
+    <string>0.84.0</string>
+    <key>NSHumanReadableCopyright</key>
+    <string></string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>UIFileSharingEnabled</key>
+    <true/>
+    <key>UISupportsDocumentBrowser</key>
+    <true/>
+    <key>UIStatusBarHidden</key>
+    <true/>
+    <key>UIRequiresFullScreen</key>
+    <true/>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+      <string>UIInterfaceOrientationLandscapeLeft</string>
+      <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UIBackgroundModes</key>
+    <array>
+      <string>audio</string>
+    </array>
+  </dict>
+</plist>
