@@ -1,0 +1,143 @@
+# a tour of every page
+wait 300
+shot 00_splash
+wait 1600
+cc 19 100
+shot 01_main
+tap 1 120
+tap 5 90
+wait 100
+shot 02_main_hits
+btn PLAY
+wait 2700
+shot 03_playing
+btn STOP
+wait 100
+btn SEQ
+wait 50
+shot 04_seq
+tap 3 110
+tap 11 100
+wait 50
+shot 05_seq_steps
+btn SEQREC
+wait 3000
+btn B1
+pad 9 120
+wait 220
+pad 9 0
+wait 2400
+btn STOP
+wait 100
+shot 06_seq_recorded
+btn SEQ
+btn 16LEVELS
+btn SHIFT down
+pad 9 100
+btn SHIFT up
+wait 50
+shot 07_keys
+tap 1 100
+tap 5 100
+tap 8 100
+wait 400
+btn 16LEVELS
+btn 16LEVELS
+btn SHIFT down
+pad 10 100
+btn SHIFT up
+btn CHOP
+btn B1
+btn B1
+wait 50
+wheel 2
+shot 08_chop
+tap 1 110
+wait 300
+btn B3
+wait 50
+shot 09_chops_to_pads
+btn CHOP
+btn PADFX
+wait 50
+shot 10_padedit_sound
+wheel 8
+btn PLUS
+btn PLUS
+btn PLUS
+btn PLUS
+wait 50
+shot 11_padedit_retro
+btn B2
+wheel 21
+btn PUSH
+wait 50
+shot 12_padedit_fx
+btn B3
+shot 13_padedit_tools
+btn PADFX
+btn KNOBFX
+knob 1 -20
+knob 2 10
+wait 50
+shot 14_mixer
+btn KNOBFX
+btn LOOP
+btn B1
+btn B1
+btn PLUS
+btn SHIFT down
+btn PLUS
+btn SHIFT up
+btn B3
+wait 50
+shot 15_song
+btn LOOP
+btn SAMPLE
+input on
+wait 600
+shot 16_sample
+btn SAMPLEREC
+wait 1500
+shot 17_sample_rec
+btn SAMPLEREC
+wait 200
+input off
+shot 18_sample_done
+btn SAMPLE
+btn SAMPLESELECT
+wait 50
+shot 19_browser
+btn PUSH
+wait 50
+wheel 3
+shot 20_browser_kit
+btn SAMPLESELECT
+btn PUSH
+wait 50
+shot 21_menu
+btn PUSH
+wait 200
+shot 22_saved
+btn B1
+btn PUSH
+wheel 5
+btn PUSH
+wait 400
+shot 23_export
+btn PUSH
+wheel 8
+btn PUSH
+shot 24_settings
+btn B1
+btn PUSH
+wheel 9
+btn PUSH
+shot 25_about
+btn B1
+btn PUSH
+wheel 10
+btn PUSH
+shot 26_exit_confirm
+btn B3
+wait 100

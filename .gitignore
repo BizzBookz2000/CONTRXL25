@@ -21,3 +21,9 @@ android/assets/www/
 android/keystore/
 *.jks
 *.keystore
+
+# MPC Sample edition: build output
+mpc-sample/build/
+mpc-sample/dist/
+mpc-sample/mod/contrxl25
+mpc-sample/mod/README.txt

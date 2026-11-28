@@ -19,6 +19,7 @@ and open it here, and the other way round.
 | `CONTRXL25_iPad.jucer`, `Builds/iOS/`, `JuceLibraryCode/`, `README_iPad.md` | iPad version (Xcode) |
 | `android/` | Android app (.apk) — see `android/README-Android.md` |
 | `web/CONTRXL25.html` | The original web version (runs in Chrome/Edge) |
+| `mpc-sample/` | MPC Sample edition: a mod for the Akai MPC Sample (firmware 1.4, Illah Choice menu) - see `mpc-sample/README.md` |
 | `docs/` | User's manual (PDF) |
 | `Tests/` | Timing test for the sequencer |
 

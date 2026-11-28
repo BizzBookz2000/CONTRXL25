@@ -1,0 +1,6 @@
+wait 2000
+btn PUSH
+wheel 7
+btn PUSH
+wait 500
+shot stems_done
